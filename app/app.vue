@@ -3,8 +3,10 @@
 import { reactive, onUnmounted } from "vue";
 import {formatAbsScsTime, formatRelScsTime, TruckTelSocket} from "~/trucktel.ts";
 import {design} from "~/design.ts";
+import { useFullscreen } from '@vueuse/core'
 import Indicator from './components/Indicator.vue'
 import Display from './components/Display.vue'
+import { Color } from 'color-core';
 
 const current_state = reactive({
   paused: null,
@@ -29,11 +31,20 @@ onUnmounted(() => {
     trucktel.close();
 });
 
+const ambient_level = ref(1.0);
+const backlight_level = ref(1.0);
+
 const flash = ref(false);
+const t = ref(0.0);
+
 let timer;
 function timeout() {
   timer = window.setTimeout(timeout, 350);
   flash.value = !flash.value;
+  t.value += 1;
+  ambient_level.value = Math.sin(t.value * 0.05) * 0.5 + 0.5;
+  backlight_level.value = Math.sin(t.value * 0.16) > 0 ? 1.0 : 0.0;
+  //if (ambient_level.value > 1.0) ambient_level.value = 0.0;
 }
 onMounted(() => {
   timeout();
@@ -42,159 +53,384 @@ onUnmounted(() => {
   window.clearTimeout(timeout);
 })
 
+const { isFullscreen, enter, exit, toggle } = useFullscreen()
+
+const theme = ref({
+  background: '#444',
+  primary: '#DDD',
+  secondary: '#F98',
+  backlight: '#CFA',
+  display: '#DDD',
+  segments: '#0000000C',
+  needle: '#C43',
+  needle_stroke: '#0008',
+  indicator_red: '#F10',
+  indicator_amber: '#FA0',
+  indicator_green: '#0F6',
+  indicator_blue: '#36F',
+});
+
+function multiplyColors(a, b) {
+  return new Color({
+    r: (a.r * b.r) / 255,
+    g: (a.g * b.g) / 255,
+    b: (a.b * b.b) / 255,
+    a: a.a,
+  });
+}
+
+function computeColors() {
+  const amb_lvl = ambient_level.value;
+  const bl_lvl = backlight_level.value;
+  const th = theme.value;
+
+  // Ambient light color. White at max brightness, orange-y when dimmed.
+  const amb_col = new Color({
+    r: Math.pow(amb_lvl, 0.8) * 240 + 10,
+    g: Math.pow(amb_lvl, 1.0) * 240 + 10,
+    b: Math.pow(amb_lvl, 1.2) * 240 + 10,
+  });
+
+  // Compute background color.
+  const background = multiplyColors(new Color(th.background), amb_col);
+
+  // Shared function for performing rudimentary shading.
+  function shade(base, emission, strength, brightness) {
+    // For the diffuse color we just multiply the base color by the ambient light
+    // level.
+    const diffuse = multiplyColors(base, amb_col);
+
+    // To simulate some degree of eye adjustment to ambient light levels, we
+    // reduce the emission strength based on ambient light.
+    if (emission === undefined) {
+      emission = base;
+    }
+    const gamma = 1.0 - Math.pow(amb_lvl * brightness, 2)
+    strength *= gamma;
+
+    // We just do basic mixing for the base vs emission color, because we can't
+    // do better than that in places where the diffuse vs emission colors are
+    // rendered seperately.
+    const combined = diffuse.mix(emission, strength);
+
+    // For when the emission color is used separately, set the alpha channel.
+    emission.setAlpha(strength);
+
+    // The glow color is the same as the emission color, but with lower alpha.
+    const glow = new Color(emission.toHex());
+    glow.setAlpha(strength * Math.pow(gamma, 3));
+    const no_glow = new Color(emission.toHex());
+    no_glow.setAlpha(1);
+
+    return {
+      diffuse: {
+        fill: diffuse.toHex(),
+      },
+      emission: {
+        fill: emission.toHex(),
+        filter: `drop-shadow(0px 0px 5px ${glow.toHex()})`,
+      },
+      combined: {
+        fill: combined.toHex(),
+        filter: `drop-shadow(0px 0px 5px ${glow.toHex()})`,
+      },
+      needle: {
+        fill: combined.toHex(),
+        filter: `drop-shadow(0px 0px 20px #0008) drop-shadow(0px 0px 10px ${glow.toHex()})`,
+      },
+      indicator: {
+        on: {
+          fill: combined.toHex(),
+          filter: `drop-shadow(0px 0px 5px ${glow.toHex()})`,
+          transition: 'fill 0.1s',
+        },
+        off: {
+          fill: diffuse.toHex(),
+          transition: 'fill 0.1s',
+        },
+      },
+    };
+  }
+
+  const c_prim = new Color(th.primary);
+  const c_sec = new Color(th.secondary);
+  const c_bl = new Color(th.backlight);
+  const c_dis = new Color(th.display);
+  const c_seg = new Color(th.segments);
+  const c_ndl = new Color(th.needle);
+  const c_red = new Color(th.indicator_red);
+  const c_amb = new Color(th.indicator_amber);
+  const c_grn = new Color(th.indicator_green);
+  const c_blu = new Color(th.indicator_blue);
+
+  const primary = shade(c_prim, multiplyColors(c_prim, c_bl), bl_lvl, 0.9);
+  const secondary = shade(c_sec, multiplyColors(c_sec, c_bl), bl_lvl, 0.9);
+  const needle = shade(c_ndl, c_ndl, bl_lvl, 0.9);
+  const display = shade(c_seg, c_dis, bl_lvl, 0.7);
+  const indicator_red = shade(c_seg, c_red, 1.0, 0.5);
+  const indicator_amber = shade(c_seg, c_amb, 1.0, 0.5);
+  const indicator_green = shade(c_seg, c_grn, 1.0, 0.5);
+  const indicator_blue = shade(c_seg, c_blu, 1.0, 0.5);
+
+  return {
+    background: background.toHex(),
+    primary: primary,
+    secondary: secondary,
+    display: display,
+    needle: needle,
+    indicator: {
+      red: indicator_red.indicator,
+      amber: indicator_amber.indicator,
+      green: indicator_green.indicator,
+      blue: indicator_blue.indicator,
+    }
+  };
+}
+
+const colors = computed(() => computeColors());
+
+/*const colors = {
+  ambient_level: ref(1.0),
+  backlight_level: ref(1.0),
+
+  primary: {
+    config: {
+      base: ref('#FFF'),
+      emission: ref('#AF8'),
+    },
+  },
+
+  ambient: undefined,
+};
+
+colors.ambient = computed(() => {
+  return new Color({
+    r: Math.pow(colors.ambient_level.value, 0.8) * 240 + 10,
+    g: Math.pow(colors.ambient_level.value, 1.0) * 240 + 10,
+    b: Math.pow(colors.ambient_level.value, 1.2) * 240 + 10,
+  });
+});
+
+function color_multiply(a, b) {
+  return new Color({
+    r: (a.r * b.r) / 255,
+    g: (a.g * b.g) / 255,
+    b: (a.b * b.b) / 255,
+  });
+}
+
+function compute_lighting(base, emission, strength) {
+  // For the diffuse color we just multiply the base color by the ambient light
+  // level.
+  const diffuse = color_multiply(base, colors.ambient_level.value);
+
+  // To simulate some degree of eye adjustment to ambient light levels, we
+  // reduce the emission strength based on ambient light.
+  if (emission === undefined) {
+    emission = base;
+  }
+  strength *= 1.0 - Math.pow(colors.ambient_level.value * 0.9, 2);
+
+  // We just do basic mixing for the base vs emission color, because we can't
+  // do better than that in places where the diffuse vs emission colors are
+  // rendered seperately.
+  const combined = diffuse.mix(emission, strength);
+
+  // For when the emission color is used separately, set the alpha channel.
+  emission.setAlpha(strength);
+
+  // The glow color is the same as the emission color, but with lower alpha.
+  const glow = new Color(emission);
+  glow.setAlpha(strength * 0.3);
+
+  return {
+    diffuse: diffuse,
+    emission: emission,
+    combined: combined,
+    glow: glow,
+  };
+}
+
+colors.background = computed(() => {
+  return color_multiply(colors.ambient.value, new Color('#444'));
+});
+
+colors.primary.computed = computed(() => {
+  return compute_lighting(
+      new Color(colors.primary.config.base.value),
+      new Color(colors.primary.config.emission.value),
+      colors.backlight_level.value
+  );
+});
+*/
+
+
+//light.background = 'rgb(218.0, 0.0, 0.0)';
+//alert(light.background.value);
+
+
 </script>
 
 <template>
-  <h1>TruckTel demo</h1>
 
-  <!--
-  <div style="display: grid; aspect-ratio: 1; grid-template: repeat(8, 1fr) / repeat(8, 1fr); width: 100px">
-    <Indicator icon="mdiArrowLeftBold" size="15cqi" color="green" :active="flash" class="positioned" style="left: 50cqi"/>
-    <Indicator icon="mdiArrowRightBold" size="15cqi" color="green" :active="flash" style="grid-area: 2 / 7 / 3 / 8"/>
-    <div style="grid-area: 2 / 2 / 8 / 8" class="gauge-gauge"></div>
+  <div class="container" @click="toggle" :style="{'background-color': colors.background}">
+    <div class="dashboard_top" :style="{'aspect-ratio': design.dim.view.w + ' / ' + design.dim.view.h}">
+      {{""/* Note: vue is being an idiot and is refusing to bind viewBox reliably, regardless of camelcase property workaround */}}
+      <svg class="dashboard_full" viewBox="0 0 1300 600">
+        <!-- Details for the needles. -->
+        <defs>
+          <radialGradient id="needleCenter">
+            <stop offset="10%" stop-color="#0008" />
+            <stop offset="40%" stop-color="#0007" />
+            <stop offset="50%" stop-color="#0004" />
+            <stop offset="70%" stop-color="#0001" />
+            <stop offset="100%" stop-color="#0000" />
+          </radialGradient>
+        </defs>
+
+        <!-- LAYER 0 DIFFUSE -->
+        <path
+            :d="design.layer0.pth" class="dashboard_background"
+            :style="{'fill': colors.background}"
+        />
+        <g :style="colors.primary.diffuse">
+          <path :d="design.layer0.prim.pth"/>
+          <text
+              v-for="label in design.layer0.prim.lbl"
+              :x="label.co.x" :y="label.co.y"
+              :style="{'font-size': (0.7 * label.sz) + 'pt'}"
+          >{{ label.txt }}</text>
+        </g>
+        <g :style="colors.secondary.diffuse">
+          <path :d="design.layer0.sec.pth"/>
+          <text
+              v-for="label in design.layer0.sec.lbl"
+              :x="label.co.x" :y="label.co.y"
+              :style="{'font-size': (0.7 * label.sz) + 'pt'}"
+          >{{ label.txt }}</text>
+        </g>
+        <g :style="colors.display.diffuse">
+          <text
+              v-for="display in design.layer0.disp"
+              :x="display.co.x" :y="display.co.y"
+              :style="{'font-size': (0.7 * display.sz) + 'pt'}"
+              :class="['dashboard_' + display.fnt.toLowerCase()]"
+          >{{ display.seg }}</text>
+        </g>
+
+        <!-- LAYER 0 AMBIENT SHADING -->
+        <path :d="design.layer1.pth" class="dashboard_occlusion"/>
+
+        <!-- LAYER 0 EMISSION -->
+        <g :style="colors.primary.emission">
+          <path :d="design.layer0.prim.pth"/>
+          <text
+              v-for="label in design.layer0.prim.lbl"
+              :x="label.co.x" :y="label.co.y"
+              :style="{'font-size': (0.7 * label.sz) + 'pt'}"
+          >{{ label.txt }}</text>
+        </g>
+        <g :style="colors.secondary.emission">
+          <path :d="design.layer0.sec.pth"/>
+          <text
+              v-for="label in design.layer0.sec.lbl"
+              :x="label.co.x" :y="label.co.y"
+              :style="{'font-size': (0.7 * label.sz) + 'pt'}"
+          >{{ label.txt }}</text>
+        </g>
+        <g :style="colors.display.emission">
+          <text
+              v-for="display in design.layer0.disp"
+              :x="display.co.x" :y="display.co.y"
+              :style="{'font-size': (0.7 * display.sz) + 'pt'}"
+              :class="['dashboard_' + display.fnt.toLowerCase()]"
+          >{{ display.seg }}</text>
+        </g>
+        <g :style="colors.needle.needle">
+          <path
+              v-for="needle in design.layer0.ndl"
+              :transform="'translate(' + needle.co.x + ' ' + needle.co.y + ') rotate(' + needle.clp[0] + ')'"
+              :d="needle.pth"
+          />
+        </g>
+
+        <!-- LAYER 1 -->
+        <!-- Combined diffuse and emission for better rendering performance. -->
+        <!-- Needle shadows cover emission as a result, but it's hardly noticeable IMO. -->
+        <path
+            :d="design.layer1.pth" class="dashboard_background"
+            :style="{'fill': colors.background}"
+        />
+        <g :style="colors.primary.combined">
+          <path :d="design.layer1.prim.pth"/>
+          <text
+              v-for="label in design.layer1.prim.lbl"
+              :x="label.co.x" :y="label.co.y"
+              :style="{'font-size': (0.7 * label.sz) + 'pt'}"
+          >{{ label.txt }}</text>
+        </g>
+        <g :style="colors.secondary.combined">
+          <path :d="design.layer1.sec.pth"/>
+          <text
+              v-for="label in design.layer1.sec.lbl"
+              :x="label.co.x" :y="label.co.y"
+              :style="{'font-size': (0.7 * label.sz) + 'pt'}"
+          >{{ label.txt }}</text>
+        </g>
+
+        <path
+            v-for="indicator in design.layer1.ind"
+            :transform="'translate(' + indicator.co.x + ' ' + indicator.co.y + ')'"
+            :d="indicator.pth"
+            :style="colors.indicator[indicator.col][false ? 'on' : 'off']"
+        />
+
+        <g :style="colors.needle.needle">
+          <g
+              v-for="needle in design.layer1.ndl"
+              :transform="'translate(' + needle.co.x + ' ' + needle.co.y + ') rotate(' + needle.clp[0] + ')'"
+          >
+            <path :d="needle.pth"/>
+            <circle r="20" fill="url('#needleCenter')" stroke="none"/>
+          </g>
+        </g>
+      </svg>
+    </div>
   </div>
-  -->
 
-  <!--
-  <div class="gauge" style="width: 300px; height: 300px;">
-    <div class="gauge-gauge"></div>
-  </div>
-  -->
-
-  <!--
-  <p>
-    km/h
-  </p>
-
-  <table>
-    <tr>
-      <td><Indicator icon="mdiCarBrakeAlert" size="5cqi" color="red"/></td>
-      <td><Indicator icon="mdiCarBrakeParking" size="5cqi" color="red"/></td>
-      <td><Indicator icon="mdiCarBrakeLowPressure" size="5cqi" color="red"/></td>
-      <td><Indicator icon="mdiCarBrakeRetarder" size="5cqi" color="green"/></td>
-      <td><Display text="!" pattern="8" type="7seg" size="3.5cqi" color="green"/></td>
-    </tr>
-  </table>
-
-  <p>
-    <Display text="1" pattern="~" type="14seg" size="3.5cqi" color="gray"/>
-    <Display text="2" pattern="8" type="7seg" size="3.5cqi" color="gray"/>
-    <Indicator icon="mdiCarShiftPattern" size="5cqi" color="amber"/>
-    <Indicator icon="mdiEngineOutline" size="5cqi" color="amber"/>
-    <Indicator icon="mdiCarBattery" size="5cqi" color="red"/>
-  </p>
-  <p>
-    <Indicator icon="mdiGasStation" size="5cqi" color="red"/>
-    <Indicator icon="mdiOil" size="5cqi" color="red"/>
-    <Indicator icon="mdiCoolantTemperature" size="5cqi" color="red"/>
-  </p>
-  <p>
-    <Indicator icon="mdiPauseBoxOutline" size="5cqi" color="amber" :active="current_state.paused !== false"/>
-    <Indicator icon="mdiNetworkStrength4Alert" size="5cqi" color="red" :active="current_state.paused === null"/>
-    <Indicator icon="mdiBedOutline" size="5cqi" color="amber"/>
-    <Indicator icon="mdiTimerOutline" size="5cqi" color="gray"/>
-    <Indicator icon="mdiFlag" size="5cqi" color="gray"/>
-  </p>
-  <p>
-    <Indicator icon="mdiArrowLeftBold" size="5cqi" color="green" :active="flash"/>
-    <Indicator icon="mdiCarParkingLights" size="5cqi" color="green" active/>
-    <Indicator icon="mdiCarLightDimmed" size="5cqi" color="green"/>
-    <Indicator icon="mdiCarLightHigh" size="5cqi" color="blue"/>
-    <Indicator icon="mdiAlarmLight" size="5cqi" color="amber"/>
-    <Indicator icon="mdiArrowRightBold" size="5cqi" color="green" :active="flash"/>
-    <Indicator icon="mdiHazardLights" size="5cqi" color="red" active/>
-  </p>
-  <p>
-    <Indicator icon="mdiCarCruiseControl" size="5cqi" color="green"/>
-  </p>
-  <p>
-    Paused: {{ current_state.paused }}
-  </p>
-  <p>
-    Time: <span class="seg7 indicator-gray"><span>{{ formatAbsScsTime(unpaused_state.time) }}</span><span>888 88:88</span></span> banana
-  </p>
-  <p>
-    Rest remain: <span class="seg14">{{ formatRelScsTime(unpaused_state.rest_remain) }}</span>
-  </p>
-  <p>
-    Job remain: {{ formatRelScsTime(current_state.job_expected - unpaused_state.time) }}
-  </p>
-  <p>
-    Nav remain: {{ formatRelScsTime(unpaused_state.nav_remain_time) }}
-  </p>
-  <p>
-    Nav dist: {{ unpaused_state.nav_remain_dist }}
-  </p>
-  <p>
-    <span class="seg14">{{ formatAbsScsTime(unpaused_state.time) }}</span>
-  </p>-->
-
-  <div class="dashboard_top" :style="{'aspect-ratio': design.dim.view.w + ' / ' + design.dim.view.h}">
-    <svg class="dashboard_full" viewBox="0 0 13 6">
-      <path :d="design.layer0.pth" fill="#222"/>
-      <text v-for="display in design.layer0.disp" :x="display.co.x" :y="display.co.y" :style="{'font-size': (0.7 * display.sz) + 'pt'}" :class="['dashboard_' + display.fnt.toLowerCase(), 'dashboard_segment']">{{ display.seg }}</text>
-      <path :d="design.layer1.pth" class="dashboard_occlusion"/>
-      <path :d="design.layer0.prim.pth" class="dashboard_primary"/>
-      <path :d="design.layer0.sec.pth" class="dashboard_secondary"/>
-      <text v-for="label in design.layer0.prim.lbl" :x="label.co.x" :y="label.co.y" :style="{'font-size': (0.7 * label.sz) + 'pt'}" class="dashboard_primary">{{ label.txt }}</text>
-      <text v-for="label in design.layer0.sec.lbl" :x="label.co.x" :y="label.co.y" :style="{'font-size': (0.7 * label.sz) + 'pt'}" class="dashboard_secondary">{{ label.txt }}</text>
-      <path v-for="needle in design.layer0.ndl" :transform="'translate(' + needle.co.x + ' ' + needle.co.y + ') rotate(' + needle.clp[0] + ')'" :d="needle.pth" class="dashboard_needle" />
-      <path :d="design.layer1.pth" fill="#222"/>
-      <path :d="design.layer1.prim.pth" class="dashboard_primary"/>
-      <path :d="design.layer1.sec.pth" class="dashboard_secondary"/>
-      <text v-for="label in design.layer1.prim.lbl" :x="label.co.x" :y="label.co.y" :style="{'font-size': (0.7 * label.sz) + 'pt'}" class="dashboard_primary">{{ label.txt }}</text>
-      <text v-for="label in design.layer1.sec.lbl" :x="label.co.x" :y="label.co.y" :style="{'font-size': (0.7 * label.sz) + 'pt'}" class="dashboard_secondary">{{ label.txt }}</text>
-      <path v-for="indicator in design.layer1.ind" :transform="'translate(' + indicator.co.x + ' ' + indicator.co.y + ')'" :d="indicator.pth" class="dashboard_segment" />
-      <path v-for="needle in design.layer1.ndl" :transform="'translate(' + needle.co.x + ' ' + needle.co.y + ') rotate(' + needle.clp[0] + ')'" :d="needle.pth" class="dashboard_needle" />
-    </svg>
-  </div>
-
-  <!--<div class="dashboard">
-    <svg style="position: absolute; left: 91.538%; width: 6.154%; top: 38.333%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M-0.07329 -0.19776 L0.15024 -0.19776 L-0.12917 -0.19776 Z M0.09436 -0.19776 L0.15024 -0.19776 L-0.07329 -0.19776 Z M0.22539 0.11042 L0.24954 0.10851 L0.24629 0.10757 L0.24331 0.10629 L0.22285 0.10654 Z M-0.26833 -0.08055 L-0.26881 -0.08418 L-0.26881 -0.08787 L-0.26833 -0.09150 L-0.26739 -0.09501 L-0.26600 -0.09837 L-0.26418 -0.10152 L-0.26195 -0.10443 L-0.25934 -0.10703 L-0.25643 -0.10926 L-0.25328 -0.11108 L-0.24992 -0.11247 L-0.24641 -0.11341 L-0.24278 -0.11389 L-0.23909 -0.11389 L-0.23545 -0.11341 L-0.23194 -0.11247 L-0.22858 -0.11108 L-0.22543 -0.10926 L-0.22394 -0.10820 L-0.17441 -0.10750 L-0.17691 -0.11413 L-0.18002 -0.12042 L-0.18372 -0.12632 L-0.18797 -0.13179 L-0.19273 -0.13678 L-0.19795 -0.14125 L-0.20361 -0.14516 L-0.20966 -0.14846 L-0.21606 -0.15111 L-0.15711 -0.21005 L-0.18673 -0.23966 L-0.29067 -0.13574 L-0.29039 -0.13547 L-0.29626 -0.12878 L-0.30126 -0.12134 L-0.30530 -0.11326 L-0.30829 -0.10461 L-0.31014 -0.09550 L-0.31062 -0.09080 L-0.31078 -0.04456 L-0.25488 -0.06182 L-0.25792 -0.06384 L-0.26069 -0.06627 L-0.26195 -0.06762 L-0.26418 -0.07052 L-0.26600 -0.07368 L-0.26739 -0.07703 Z M-0.17192 -0.00023 L-0.17881 0.00215 L-0.18526 0.00538 L-0.19120 0.00938 L-0.19658 0.01409 L-0.20131 0.01945 L-0.20533 0.02539 L-0.20858 0.03184 L-0.21099 0.03875 L-0.21248 0.04604 L-0.21305 0.18120 L-0.21353 0.18483 L-0.21448 0.18835 L-0.21587 0.19170 L-0.21768 0.19486 L-0.21991 0.19776 L-0.22252 0.20037 L-0.22543 0.20260 L-0.22858 0.20442 L-0.23194 0.20581 L-0.23545 0.20675 L-0.23909 0.20723 L-0.24278 0.20723 L-0.24641 0.20675 L-0.24992 0.20581 L-0.25328 0.20442 L-0.25643 0.20260 L-0.25934 0.20037 L-0.26195 0.19776 L-0.26418 0.19486 L-0.26600 0.19170 L-0.26739 0.18835 L-0.26833 0.18483 L-0.26881 0.18120 L-0.26887 -0.02205 L-0.26001 -0.01892 L-0.25072 -0.01690 L-0.24589 -0.01637 L-0.23632 -0.01634 L-0.22724 -0.01754 L-0.21845 -0.01990 L-0.21006 -0.02337 L-0.20218 -0.02792 L-0.19491 -0.03348 L-0.18838 -0.04001 L-0.18282 -0.04728 L-0.17827 -0.05516 L-0.17480 -0.06355 L-0.17243 -0.07233 L-0.17123 -0.08141 L-0.17146 -0.09340 L-0.17259 -0.10058 L-0.17441 -0.10750 L-0.22394 -0.10820 L-0.22117 -0.10577 L-0.21991 -0.10443 L-0.21768 -0.10152 L-0.21587 -0.09837 L-0.21448 -0.09501 L-0.21353 -0.09150 L-0.21305 -0.08787 L-0.21305 -0.08418 L-0.21353 -0.08055 L-0.21448 -0.07703 L-0.21587 -0.07368 L-0.21768 -0.07052 L-0.21991 -0.06762 L-0.22252 -0.06501 L-0.22543 -0.06278 L-0.22858 -0.06096 L-0.23194 -0.05957 L-0.23545 -0.05863 L-0.23909 -0.05815 L-0.24278 -0.05815 L-0.24641 -0.05863 L-0.24992 -0.05957 L-0.25328 -0.06096 L-0.25488 -0.06182 L-0.31078 -0.04456 L-0.31063 0.18397 L-0.30943 0.19305 L-0.30707 0.20183 L-0.30359 0.21022 L-0.29905 0.21810 L-0.29348 0.22537 L-0.28695 0.23189 L-0.27968 0.23746 L-0.27180 0.24201 L-0.26341 0.24548 L-0.25462 0.24784 L-0.24554 0.24904 L-0.23632 0.24904 L-0.22724 0.24784 L-0.21845 0.24548 L-0.21006 0.24201 L-0.20218 0.23746 L-0.19491 0.23189 L-0.18838 0.22537 L-0.18282 0.21810 L-0.17827 0.21022 L-0.17480 0.20183 L-0.17243 0.19305 L-0.17123 0.18397 L-0.17108 0.03969 L-0.12917 0.03969 L-0.12917 0.24920 L0.15024 0.24920 L0.15024 -0.19776 L0.09436 -0.19776 L0.09436 -0.05809 L-0.07329 -0.05809 L-0.07329 -0.19776 L-0.12917 -0.19776 L-0.12917 -0.00222 L-0.16467 -0.00171 Z M-0.08084 -0.25312 L-0.08810 -0.25164 L-0.09499 -0.24926 L-0.10144 -0.24603 L-0.10738 -0.24203 L-0.11275 -0.23732 L-0.11749 -0.23196 L-0.12151 -0.22603 L-0.12476 -0.21957 L-0.12716 -0.21266 L-0.12866 -0.20537 L-0.12917 -0.19776 L0.15024 -0.19776 L0.14973 -0.20537 L0.14825 -0.21266 L0.14587 -0.21957 L0.14264 -0.22603 L0.13864 -0.23196 L0.13393 -0.23732 L0.12857 -0.24203 L0.12263 -0.24603 L0.11617 -0.24926 L0.10926 -0.25164 L0.10197 -0.25312 Z M0.27512 0.11980 L0.27917 0.11742 L0.28275 0.11456 L0.28583 0.11124 L0.28841 0.10749 L0.29045 0.10331 L0.29194 0.09874 L0.29284 0.09378 L0.29315 0.05751 L0.18141 0.05751 L0.18141 0.07209 L0.22106 0.07209 L0.21935 0.07761 L0.21840 0.08262 L0.21811 0.08749 L0.21843 0.09272 L0.21934 0.09766 L0.22083 0.10228 L0.22285 0.10654 L0.24331 0.10629 L0.24061 0.10468 L0.23822 0.10276 L0.23615 0.10055 L0.23442 0.09806 L0.23305 0.09532 L0.23204 0.09232 L0.23143 0.08911 L0.23122 0.08568 L0.23150 0.08107 L0.23241 0.07670 L0.23400 0.07209 L0.28086 0.07209 L0.28065 0.09082 L0.28003 0.09435 L0.27903 0.09746 L0.27768 0.10015 L0.27598 0.10245 L0.27398 0.10438 L0.27169 0.10596 L0.26914 0.10721 L0.26635 0.10814 L0.26334 0.10879 L0.25678 0.10928 L0.25304 0.10908 L0.24954 0.10851 L0.22539 0.11042 L0.22839 0.11388 L0.23185 0.11690 L0.23571 0.11944 L0.23995 0.12147 L0.24455 0.12296 L0.24946 0.12387 L0.25465 0.12419 L0.26036 0.12390 L0.26569 0.12306 L0.27062 0.12169 Z M0.27079 -0.18780 L0.26819 -0.18635 L0.26528 -0.18514 L0.26208 -0.18419 L0.25858 -0.18349 L0.25858 -0.23527 L0.25207 -0.23501 L0.24614 -0.23425 L0.24078 -0.23301 L0.23600 -0.23131 L0.23179 -0.22917 L0.22815 -0.22660 L0.22507 -0.22363 L0.22256 -0.22027 L0.22061 -0.21653 L0.21922 -0.21245 L0.21839 -0.20804 L0.21811 -0.20332 L0.21842 -0.19837 L0.21933 -0.19372 L0.22082 -0.18937 L0.22285 -0.18537 L0.24117 -0.18618 L0.23903 -0.18736 L0.23713 -0.18873 L0.23546 -0.19029 L0.23403 -0.19205 L0.23286 -0.19399 L0.23193 -0.19612 L0.23127 -0.19845 L0.23086 -0.20095 L0.23073 -0.20365 L0.23087 -0.20614 L0.23130 -0.20847 L0.23200 -0.21062 L0.23297 -0.21258 L0.23418 -0.21436 L0.23564 -0.21593 L0.23733 -0.21730 L0.23925 -0.21846 L0.24137 -0.21940 L0.24370 -0.22012 L0.24622 -0.22060 L0.24891 -0.22085 L0.24891 -0.18382 L0.24611 -0.18441 L0.24353 -0.18520 L0.22539 -0.18173 L0.22843 -0.17850 L0.23194 -0.17568 L0.23588 -0.17332 L0.24023 -0.17143 L0.24496 -0.17005 L0.25005 -0.16920 L0.25547 -0.16891 L0.26051 -0.16918 L0.26542 -0.16997 L0.27016 -0.17127 L0.27465 -0.17308 L0.27884 -0.17538 L0.28266 -0.17817 L0.28607 -0.18144 L0.28899 -0.18517 L0.29136 -0.18937 L0.29313 -0.19402 L0.29424 -0.19911 L0.29462 -0.20463 L0.29439 -0.21051 L0.29368 -0.21580 L0.29249 -0.22064 L0.29081 -0.22519 L0.28863 -0.22957 L0.28594 -0.23395 L0.27185 -0.23395 L0.27662 -0.22547 L0.27836 -0.22122 L0.27964 -0.21694 L0.28043 -0.21262 L0.28070 -0.20823 L0.28054 -0.20483 L0.28007 -0.20167 L0.27929 -0.19875 L0.27820 -0.19607 L0.27681 -0.19363 L0.27511 -0.19144 L0.27310 -0.18949 Z M0.24580 0.16924 L0.26022 0.21020 L0.26022 0.16269 L0.29315 0.14778 L0.29315 0.13139 L0.18076 0.18136 L0.18076 0.19267 L0.29315 0.24067 L0.24580 0.20397 L0.20533 0.18726 Z M0.24382 -0.00387 L0.22617 -0.00679 L0.22728 -0.00433 L0.22815 -0.00154 L0.22876 0.00158 L0.22913 0.00504 L0.24367 0.01950 Z M0.22636 -0.02561 L0.22446 -0.02714 L0.22242 -0.02842 L0.22024 -0.02946 L0.21790 -0.03027 L0.21540 -0.03084 L0.21274 -0.03118 L0.20992 -0.03129 L0.20640 -0.03108 L0.20292 -0.03042 L0.19952 -0.02930 L0.19627 -0.02772 L0.19321 -0.02567 L0.19038 -0.02312 L0.18786 -0.02007 L0.18567 -0.01651 L0.18389 -0.01242 L0.18255 -0.00780 L0.18171 -0.00262 L0.18141 0.03555 L0.29315 0.03555 L0.29282 -0.00942 L0.29190 -0.01535 L0.29043 -0.02059 L0.28848 -0.02518 L0.28611 -0.02912 L0.28340 -0.03246 L0.28040 -0.03521 L0.27718 -0.03741 L0.27380 -0.03907 L0.27032 -0.04023 L0.26681 -0.04090 L0.26333 -0.04112 L0.25965 -0.04091 L0.25615 -0.04029 L0.25285 -0.03927 L0.24976 -0.03787 L0.24690 -0.03609 L0.24427 -0.03395 L0.24188 -0.03147 L0.23976 -0.02865 L0.23792 -0.02550 L0.26104 -0.02458 L0.26314 -0.02446 L0.26525 -0.02411 L0.26733 -0.02349 L0.26934 -0.02256 L0.27125 -0.02130 L0.27302 -0.01968 L0.27461 -0.01767 L0.27600 -0.01523 L0.27714 -0.01234 L0.27800 -0.00897 L0.27854 -0.00508 L0.27873 0.01950 L0.24367 0.01950 L0.22913 0.00504 L0.22925 0.01950 L0.19583 0.01950 L0.19598 0.00127 L0.19640 -0.00181 L0.19709 -0.00452 L0.19801 -0.00686 L0.19915 -0.00885 L0.20048 -0.01053 L0.20199 -0.01189 L0.20365 -0.01297 L0.20544 -0.01377 L0.20734 -0.01433 L0.20933 -0.01464 L0.21140 -0.01475 L0.21426 -0.01458 L0.21687 -0.01410 L0.21923 -0.01329 L0.22134 -0.01216 L0.22320 -0.01070 L0.22481 -0.00891 L0.22617 -0.00679 L0.24382 -0.00387 L0.24425 -0.00753 L0.24496 -0.01082 L0.24592 -0.01375 L0.24712 -0.01632 L0.23417 -0.01425 L0.23384 -0.01425 L0.23123 -0.01955 L0.22974 -0.02182 L0.22811 -0.02384 Z M0.28689 -0.13407 L0.28381 -0.13729 L0.27218 -0.13729 L0.27528 -0.13480 L0.27784 -0.13209 L0.27986 -0.12920 L0.28132 -0.12616 L0.28183 -0.12460 L0.28220 -0.12301 L0.28242 -0.12139 L0.28250 -0.11976 L0.28238 -0.11737 L0.28202 -0.11518 L0.28142 -0.11319 L0.28059 -0.11141 L0.27953 -0.10984 L0.27826 -0.10848 L0.27677 -0.10732 L0.27507 -0.10638 L0.27317 -0.10564 L0.27107 -0.10511 L0.26877 -0.10480 L0.21959 -0.10469 L0.21959 -0.09011 L0.26980 -0.09032 L0.27395 -0.09095 L0.27776 -0.09198 L0.28120 -0.09338 L0.28427 -0.09513 L0.28696 -0.09721 L0.28927 -0.09961 L0.29117 -0.10229 L0.29267 -0.10525 L0.29375 -0.10845 L0.29440 -0.11187 L0.29462 -0.11550 L0.29454 -0.11733 L0.29428 -0.11920 L0.29328 -0.12301 L0.29167 -0.12683 L0.28953 -0.13055 Z M0.23417 -0.01425 L0.24712 -0.01632 L0.24855 -0.01853 L0.25018 -0.02040 L0.25202 -0.02191 L0.25404 -0.02308 L0.25622 -0.02391 L0.25856 -0.02441 L0.26104 -0.02458 L0.23792 -0.02550 L0.23636 -0.02205 L0.23511 -0.01829 Z M0.27218 -0.13729 L0.29315 -0.13729 L0.21959 -0.13729 Z M0.21959 -0.13729 L0.29315 -0.13729 L0.29315 -0.15187 L0.21959 -0.15187 Z M0.28381 -0.13729 L0.29315 -0.13729 L0.27218 -0.13729 Z M0.18141 -0.05505 L0.29315 -0.05505 L0.29315 -0.06963 L0.18141 -0.06963 Z M0.29315 0.24067 L0.29315 0.22429 L0.26022 0.21020 L0.24580 0.16924 L0.24580 0.20397 Z M0.22539 -0.18173 L0.24353 -0.18520 L0.24117 -0.18618 L0.22285 -0.18537 Z"/></svg>
-    <svg style="position: absolute; left: 91.538%; width: 6.154%; top: 51.667%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M-0.15778 -0.11498 L-0.14649 -0.12908 L-0.13396 -0.14208 L-0.12028 -0.15388 L-0.10555 -0.16440 L-0.08986 -0.17355 L-0.07329 -0.18123 L-0.05592 -0.18736 L-0.03787 -0.19185 L-0.01920 -0.19461 L-0.00001 -0.19555 L0.01918 -0.19461 L0.03785 -0.19185 L0.05591 -0.18736 L0.07328 -0.18123 L0.08986 -0.17355 L0.10557 -0.16440 L0.12032 -0.15388 L0.13402 -0.14208 L0.14659 -0.12908 L0.15793 -0.11498 L0.16795 -0.09986 L0.17658 -0.08381 L0.23749 -0.08381 L0.22751 -0.10765 L0.21528 -0.13017 L0.20093 -0.15124 L0.18461 -0.17072 L0.16645 -0.18844 L0.14661 -0.20428 L0.12522 -0.21807 L0.10242 -0.22969 L0.07836 -0.23898 L0.05317 -0.24579 L0.02700 -0.24999 L-0.00001 -0.25142 L-0.02702 -0.24999 L-0.05319 -0.24579 L-0.07837 -0.23898 L-0.10244 -0.22969 L-0.12524 -0.21807 L-0.14663 -0.20428 L-0.16647 -0.18844 L-0.18462 -0.17072 L-0.20095 -0.15124 L-0.21529 -0.13017 L-0.22753 -0.10764 L-0.23750 -0.08381 L-0.17631 -0.08381 L-0.16775 -0.09986 Z M0.07836 0.23897 L0.10242 0.22968 L0.12522 0.21807 L0.14661 0.20427 L0.16645 0.18843 L0.18461 0.17071 L0.20093 0.15124 L0.21528 0.13016 L0.22751 0.10764 L0.23749 0.08380 L0.17658 0.08380 L0.16796 0.09985 L0.15795 0.11497 L0.14663 0.12907 L0.13409 0.14207 L0.12041 0.15387 L0.10568 0.16439 L0.08998 0.17354 L0.07340 0.18122 L0.05603 0.18735 L0.03795 0.19184 L0.01924 0.19460 L-0.00001 0.19554 L-0.01926 0.19460 L-0.03796 0.19184 L-0.05604 0.18735 L-0.07341 0.18122 L-0.08998 0.17354 L-0.10566 0.16439 L-0.12037 0.15387 L-0.13402 0.14207 L-0.14653 0.12907 L-0.15780 0.11497 L-0.16776 0.09985 L-0.17631 0.08380 L-0.23750 0.08380 L-0.22753 0.10764 L-0.21529 0.13016 L-0.20095 0.15124 L-0.18462 0.17071 L-0.16647 0.18843 L-0.14663 0.20427 L-0.12524 0.21807 L-0.10244 0.22968 L-0.07837 0.23897 L-0.05319 0.24578 L-0.02702 0.24998 L-0.00001 0.25141 L0.02700 0.24998 L0.05317 0.24578 Z M0.13969 0.02793 L0.25146 0.02793 L0.25146 -0.02794 L0.13969 -0.02794 L0.13969 -0.08381 L0.05587 -0.00000 L0.13969 0.08380 Z M0.20731 0.20727 L0.23749 0.23744 L0.26569 0.20503 L0.28966 0.16924 L0.30901 0.13045 L0.32334 0.08906 L0.33223 0.04544 L0.33451 0.02292 L0.33451 -0.02293 L0.33223 -0.04545 L0.32334 -0.08906 L0.30901 -0.13046 L0.28966 -0.16925 L0.26569 -0.20504 L0.23749 -0.23745 L0.20731 -0.20728 L0.23212 -0.17891 L0.25322 -0.14764 L0.27025 -0.11380 L0.28285 -0.07770 L0.29068 -0.03967 L0.29269 -0.02002 L0.29269 0.02007 L0.29068 0.03975 L0.28285 0.07782 L0.27025 0.11390 L0.25322 0.14770 L0.23212 0.17892 Z M-0.23750 0.23744 L-0.20733 0.20727 L-0.23214 0.17892 L-0.25323 0.14770 L-0.27026 0.11390 L-0.28287 0.07782 L-0.29070 0.03975 L-0.29271 0.02007 L-0.29271 -0.02002 L-0.29070 -0.03967 L-0.28287 -0.07770 L-0.27026 -0.11380 L-0.25323 -0.14764 L-0.23214 -0.17891 L-0.20733 -0.20728 L-0.23750 -0.23745 L-0.26570 -0.20504 L-0.28968 -0.16925 L-0.30903 -0.13046 L-0.32335 -0.08906 L-0.33224 -0.04545 L-0.33452 -0.02293 L-0.33452 0.02292 L-0.33224 0.04544 L-0.32335 0.08906 L-0.30903 0.13045 L-0.28968 0.16924 L-0.26570 0.20503 Z M-0.05589 -0.00000 L-0.13971 -0.08381 L-0.13971 -0.02794 L-0.25147 -0.02794 L-0.25147 0.02793 L-0.13971 0.02793 L-0.13971 0.08380 Z M0.02693 0.00740 L0.02768 0.00377 L0.02793 -0.00000 L0.02768 -0.00378 L0.02693 -0.00741 L0.02573 -0.01085 L0.02410 -0.01408 L0.02209 -0.01705 L0.01972 -0.01973 L0.01704 -0.02210 L0.01406 -0.02411 L0.01084 -0.02573 L0.00740 -0.02694 L0.00377 -0.02768 L-0.00001 -0.02794 L-0.00379 -0.02768 L-0.00741 -0.02694 L-0.01086 -0.02573 L-0.01408 -0.02411 L-0.01706 -0.02210 L-0.01974 -0.01973 L-0.02211 -0.01705 L-0.02412 -0.01408 L-0.02574 -0.01085 L-0.02695 -0.00741 L-0.02769 -0.00378 L-0.02795 -0.00000 L-0.02769 0.00377 L-0.02695 0.00740 L-0.02574 0.01084 L-0.02412 0.01407 L-0.02211 0.01704 L-0.01974 0.01972 L-0.01706 0.02209 L-0.01408 0.02410 L-0.01086 0.02573 L-0.00741 0.02693 L-0.00379 0.02767 L-0.00001 0.02793 L0.00377 0.02767 L0.00740 0.02693 L0.01084 0.02573 L0.01406 0.02410 L0.01704 0.02209 L0.01972 0.01972 L0.02209 0.01704 L0.02410 0.01407 L0.02573 0.01084 Z"/></svg>
-    <svg style="position: absolute; left: 92.308%; width: 6.154%; top: 1.667%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M-0.02565 0.16679 L0.03023 0.16623 L-0.04074 0.09695 L-0.16536 0.22378 L-0.12345 0.26540 Z M0.21862 -0.10292 L0.21408 -0.11080 L0.20851 -0.11807 L0.20198 -0.12459 L0.19471 -0.13016 L0.18683 -0.13470 L0.17844 -0.13817 L0.16965 -0.14054 L0.16057 -0.14174 L0.15135 -0.14174 L0.14227 -0.14054 L0.13348 -0.13817 L0.12509 -0.13470 L0.11721 -0.13016 L0.10994 -0.12459 L0.10341 -0.11807 L0.09784 -0.11080 L0.09330 -0.10292 L0.08982 -0.09453 L0.08746 -0.08574 L0.08626 -0.07667 L0.08611 0.05840 L0.21547 0.18774 L0.22101 0.17671 L0.22305 0.17084 L0.22510 0.16150 L0.22573 0.15487 L0.22566 -0.07667 L0.22446 -0.08574 L0.22210 -0.09453 Z M-0.00403 -0.23016 L-0.01980 -0.23925 L-0.03658 -0.24620 L-0.05415 -0.25092 L-0.07231 -0.25332 L-0.09076 -0.25332 L-0.10892 -0.25092 L-0.12649 -0.24620 L-0.14327 -0.23925 L-0.15904 -0.23016 L-0.17358 -0.21903 L-0.18663 -0.20598 L-0.19777 -0.19145 L-0.20686 -0.17568 L-0.21381 -0.15890 L-0.21853 -0.14133 L-0.22093 -0.12318 L-0.22093 -0.10473 L-0.21853 -0.08658 L-0.21381 -0.06901 L-0.20686 -0.05223 L-0.19777 -0.03646 L-0.18663 -0.02193 L-0.17358 -0.00888 L-0.15904 0.00225 L-0.14327 0.01134 L-0.12649 0.01829 L-0.10892 0.02301 L-0.09076 0.02541 L-0.07231 0.02541 L-0.05415 0.02301 L-0.03658 0.01829 L-0.01980 0.01134 L-0.00403 0.00225 L0.01051 -0.00888 L0.02356 -0.02193 L0.03470 -0.03646 L0.04379 -0.05223 L0.05074 -0.06901 L0.05546 -0.08658 L0.05786 -0.10473 L0.05786 -0.12318 L0.05546 -0.14133 L0.05074 -0.15890 L0.04379 -0.17568 L0.03470 -0.19145 L0.02356 -0.20598 L0.01051 -0.21903 Z M0.15009 0.24109 L0.18977 0.20143 L0.06962 0.08159 L-0.00917 0.08159 Z M0.13455 -0.17033 L0.14199 -0.16982 L0.14966 -0.17035 L0.15699 -0.17187 L0.16392 -0.17431 L0.17039 -0.17760 L0.17632 -0.18167 L0.18167 -0.18645 L0.18636 -0.19185 L0.19034 -0.19780 L0.19354 -0.20424 L0.19590 -0.21108 L0.19737 -0.21826 L0.19787 -0.22569 L0.19735 -0.23337 L0.19583 -0.24070 L0.19338 -0.24762 L0.19009 -0.25408 L0.18602 -0.26002 L0.18125 -0.26536 L0.17585 -0.27005 L0.16989 -0.27403 L0.16345 -0.27723 L0.15661 -0.27960 L0.14943 -0.28106 L0.14199 -0.28156 L0.13438 -0.28104 L0.12708 -0.27952 L0.12017 -0.27708 L0.11372 -0.27378 L0.10778 -0.26971 L0.10242 -0.26494 L0.09771 -0.25954 L0.09370 -0.25359 L0.09048 -0.24715 L0.08809 -0.24031 L0.08662 -0.23313 L0.08611 -0.22569 L0.08663 -0.21802 L0.08815 -0.21069 L0.09060 -0.20376 L0.09389 -0.19730 L0.09796 -0.19137 L0.10273 -0.18603 L0.10813 -0.18133 L0.11409 -0.17736 L0.12053 -0.17415 L0.12737 -0.17179 Z"/></svg>
-    <svg style="position: absolute; left: 86.154%; width: 6.154%; top: 1.667%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M0.30000 -0.20000 L0.30000 -0.14000 L-0.30000 -0.14000 L-0.30000 -0.20000 Z M-0.16000 0.00000 L-0.16000 -0.05000 L-0.17951 -0.04808 L-0.19827 -0.04239 L-0.21556 -0.03315 L-0.23071 -0.02071 L-0.24315 -0.00556 L-0.25239 0.01173 L-0.25808 0.03049 L-0.26000 0.05000 L-0.25808 0.06951 L-0.25239 0.08827 L-0.24315 0.10556 L-0.23071 0.12071 L-0.21556 0.13315 L-0.19827 0.14239 L-0.17951 0.14808 L-0.16000 0.15000 L-0.16000 0.10000 L-0.16975 0.09904 L-0.17913 0.09619 L-0.18778 0.09157 L-0.19535 0.08536 L-0.20157 0.07778 L-0.20619 0.06913 L-0.20904 0.05975 L-0.21000 0.05000 L-0.20904 0.04025 L-0.20619 0.03087 L-0.20157 0.02222 L-0.19535 0.01465 L-0.18778 0.00843 L-0.17913 0.00381 L-0.16975 0.00096 Z M-0.16000 0.10000 L-0.16000 0.15000 L-0.14049 0.14808 L-0.12173 0.14239 L-0.10444 0.13315 L-0.08929 0.12071 L-0.07685 0.10556 L-0.06761 0.08827 L-0.06192 0.06951 L-0.06000 0.05000 L-0.06192 0.03049 L-0.06761 0.01173 L-0.07685 -0.00556 L-0.08929 -0.02071 L-0.10444 -0.03315 L-0.12173 -0.04239 L-0.14049 -0.04808 L-0.16000 -0.05000 L-0.16000 0.00000 L-0.15025 0.00096 L-0.14087 0.00381 L-0.13222 0.00843 L-0.12464 0.01465 L-0.11843 0.02222 L-0.11381 0.03087 L-0.11096 0.04025 L-0.11000 0.05000 L-0.11096 0.05975 L-0.11381 0.06913 L-0.11843 0.07778 L-0.12464 0.08536 L-0.13222 0.09157 L-0.14087 0.09619 L-0.15025 0.09904 Z M0.16000 -0.07000 L0.16000 -0.12000 L0.14049 -0.11808 L0.12173 -0.11239 L0.10444 -0.10315 L0.08929 -0.09071 L0.07685 -0.07556 L0.06761 -0.05827 L0.06192 -0.03951 L0.06000 -0.02000 L0.06192 -0.00049 L0.06761 0.01827 L0.07685 0.03556 L0.08929 0.05071 L0.10444 0.06315 L0.12173 0.07239 L0.14049 0.07808 L0.16000 0.08000 L0.16000 0.03000 L0.15025 0.02904 L0.14087 0.02619 L0.13222 0.02157 L0.12465 0.01536 L0.11843 0.00778 L0.11381 -0.00087 L0.11096 -0.01025 L0.11000 -0.02000 L0.11096 -0.02975 L0.11381 -0.03913 L0.11843 -0.04778 L0.12465 -0.05535 L0.13222 -0.06157 L0.14087 -0.06619 L0.15025 -0.06904 Z M0.16000 0.03000 L0.16000 0.08000 L0.17951 0.07808 L0.19827 0.07239 L0.21556 0.06315 L0.23071 0.05071 L0.24315 0.03556 L0.25239 0.01827 L0.25808 -0.00049 L0.26000 -0.02000 L0.25808 -0.03951 L0.25239 -0.05827 L0.24315 -0.07556 L0.23071 -0.09071 L0.21556 -0.10315 L0.19827 -0.11239 L0.17951 -0.11808 L0.16000 -0.12000 L0.16000 -0.07000 L0.16975 -0.06904 L0.17913 -0.06619 L0.18778 -0.06157 L0.19536 -0.05535 L0.20157 -0.04778 L0.20619 -0.03913 L0.20904 -0.02975 L0.21000 -0.02000 L0.20904 -0.01025 L0.20619 -0.00087 L0.20157 0.00778 L0.19536 0.01536 L0.18778 0.02157 L0.17913 0.02619 L0.16975 0.02904 Z M0.16000 0.11000 L0.08000 0.19000 L0.14000 0.19000 L0.14000 0.26000 L0.18000 0.26000 L0.18000 0.19000 L0.24000 0.19000 Z"/></svg>
-    <svg style="position: absolute; left: 2.308%; width: 6.154%; top: 38.333%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M0.19427 -0.00222 L0.13839 -0.00222 L0.13839 -0.05809 L0.08251 -0.05809 L0.08251 -0.00222 L0.02663 -0.00222 L0.02663 0.05365 L0.19427 0.05365 Z M-0.25278 -0.11395 L0.25015 -0.11395 L0.30603 0.22126 L0.30603 -0.16982 L0.22221 -0.16982 L0.22221 -0.25363 L0.05457 -0.25363 L0.05457 -0.16982 L-0.05719 -0.16982 L-0.05719 -0.25363 L-0.22484 -0.25363 L-0.22484 -0.16982 L-0.30866 -0.16982 L-0.30866 0.22126 Z M-0.19690 0.05365 L-0.02925 0.05365 L-0.02925 -0.00222 L-0.19690 -0.00222 Z M0.08251 0.10952 L0.13839 0.10952 L0.13839 0.05365 L0.08251 0.05365 Z M-0.30866 0.22126 L0.30603 0.22126 L0.25015 -0.11395 L0.25015 0.16539 L-0.25278 0.16539 L-0.25278 -0.11395 Z M0.08251 0.05365 L0.19427 0.05365 L0.02663 0.05365 Z M0.13839 0.05365 L0.19427 0.05365 L0.08251 0.05365 Z"/></svg>
-    <svg style="position: absolute; left: 79.231%; width: 6.154%; top: 1.667%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M0.19848 0.20705 L0.19041 0.20598 L-0.19033 0.20598 L-0.19840 0.20705 L-0.20621 0.20915 L-0.21367 0.21224 L-0.22068 0.21628 L-0.22714 0.22122 L-0.23294 0.22702 L-0.23789 0.23348 L-0.24193 0.24049 L-0.24502 0.24795 L-0.24712 0.25576 L-0.24818 0.26382 L-0.24832 0.26792 L0.24840 0.26792 L0.24827 0.26382 L0.24720 0.25576 L0.24510 0.24795 L0.24201 0.24049 L0.23797 0.23348 L0.23302 0.22702 L0.22722 0.22122 L0.22076 0.21628 L0.21375 0.21224 L0.20629 0.20915 Z M0.22998 0.00306 L0.34311 0.00306 L0.34311 -0.05902 L0.22998 -0.05902 Z M0.22998 0.13306 L0.36311 0.13306 L0.36311 0.07098 L0.22998 0.07098 Z M0.18591 -0.08580 L0.18270 -0.11000 L0.17640 -0.13343 L0.16714 -0.15580 L0.15502 -0.17682 L0.14017 -0.19620 L0.12277 -0.21360 L0.10338 -0.22844 L0.08236 -0.24056 L0.05999 -0.24983 L0.03655 -0.25612 L0.01234 -0.25933 L-0.01226 -0.25933 L-0.03647 -0.25612 L-0.05990 -0.24983 L-0.08228 -0.24056 L-0.10330 -0.22844 L-0.12269 -0.21360 L-0.14008 -0.19620 L-0.15493 -0.17682 L-0.16705 -0.15580 L-0.17632 -0.13343 L-0.18262 -0.11000 L-0.18582 -0.08580 L-0.18623 0.17481 L0.18631 0.17481 Z M0.22998 -0.12694 L0.32311 -0.12694 L0.32311 -0.18902 L0.22998 -0.18902 Z M-0.34312 0.00306 L-0.22999 0.00306 L-0.22999 -0.05902 L-0.34312 -0.05902 Z M-0.36312 0.13306 L-0.22999 0.13306 L-0.22999 0.07098 L-0.36312 0.07098 Z M-0.32312 -0.12694 L-0.22999 -0.12694 L-0.22999 -0.18902 L-0.32312 -0.18902 Z"/></svg>
-    <svg style="position: absolute; left: 13.077%; width: 6.154%; top: 38.333%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M-0.12455 0.13236 L-0.12455 0.07650 L-0.13820 0.08235 L-0.15320 0.09216 L-0.17930 0.11647 L-0.18145 0.11802 L-0.18370 0.11932 L-0.18611 0.12037 L-0.18878 0.12118 L-0.19177 0.12174 L-0.19517 0.12207 L-0.20295 0.12207 L-0.20635 0.12174 L-0.20934 0.12118 L-0.21200 0.12037 L-0.21441 0.11932 L-0.21666 0.11802 L-0.21882 0.11647 L-0.24672 0.09073 L-0.25702 0.08388 L-0.26903 0.07807 L-0.27569 0.07578 L-0.28281 0.07403 L-0.29037 0.07292 L-0.29840 0.07252 L-0.29840 0.12218 L-0.29111 0.12263 L-0.28812 0.12319 L-0.28546 0.12400 L-0.28304 0.12504 L-0.28080 0.12634 L-0.27864 0.12790 L-0.25073 0.15364 L-0.24044 0.16049 L-0.22843 0.16630 L-0.22176 0.16859 L-0.21465 0.17033 L-0.20708 0.17145 L-0.19906 0.17185 L-0.19103 0.17145 L-0.18346 0.17033 L-0.17635 0.16859 L-0.16969 0.16630 L-0.15767 0.16049 L-0.14738 0.15364 L-0.13875 0.14650 Z M-0.00062 0.17064 L0.00720 0.16854 L0.01465 0.16545 L0.02166 0.16142 L0.02812 0.15647 L0.03392 0.15067 L0.03887 0.14421 L0.04291 0.13720 L0.04600 0.12975 L0.04810 0.12194 L0.04917 0.11387 L0.04911 0.10491 L0.04855 0.10014 L0.04634 0.09093 L0.04275 0.08224 L0.03786 0.07414 L0.03174 0.06673 L0.02447 0.06011 L0.02447 0.02286 L0.12381 0.02286 L0.12381 -0.02680 L0.02447 -0.02680 L0.02447 -0.07646 L0.12381 -0.07646 L0.12381 -0.12612 L0.02447 -0.12612 L0.02447 -0.17579 L0.12381 -0.17579 L0.12381 -0.22545 L0.02447 -0.22545 L0.02439 -0.24032 L0.02375 -0.24516 L0.02249 -0.24985 L0.02063 -0.25432 L0.01821 -0.25853 L0.01524 -0.26240 L0.01176 -0.26588 L0.00788 -0.26885 L0.00368 -0.27127 L-0.00080 -0.27313 L-0.00548 -0.27439 L-0.01033 -0.27503 L-0.01525 -0.27503 L-0.02009 -0.27439 L-0.02477 -0.27313 L-0.02925 -0.27127 L-0.03345 -0.26885 L-0.03733 -0.26588 L-0.04081 -0.26240 L-0.04378 -0.25853 L-0.04620 -0.25432 L-0.04806 -0.24985 L-0.04932 -0.24516 L-0.04996 -0.24032 L-0.05004 0.06011 L-0.05731 0.06648 L-0.06343 0.07381 L-0.06833 0.08196 L-0.07191 0.09077 L-0.07412 0.10009 L-0.07469 0.10489 L-0.07474 0.11387 L-0.07367 0.12194 L-0.07157 0.12975 L-0.06848 0.13720 L-0.06444 0.14421 L-0.05949 0.15067 L-0.05369 0.15647 L-0.04723 0.16142 L-0.04023 0.16545 L-0.03277 0.16854 L-0.02496 0.17064 L-0.01689 0.17171 L-0.00869 0.17171 Z M0.15065 0.21489 L0.14036 0.20804 L0.12835 0.20222 L0.12168 0.19994 L0.11457 0.19819 L0.10700 0.19707 L0.09898 0.19668 L0.09095 0.19707 L0.08338 0.19819 L0.07627 0.19994 L0.06961 0.20222 L0.05759 0.20804 L0.04730 0.21489 L0.01939 0.24062 L0.01723 0.24218 L0.01499 0.24348 L0.01257 0.24453 L0.00991 0.24533 L0.00692 0.24589 L-0.00037 0.24634 L0.19832 0.24634 L0.19103 0.24589 L0.18804 0.24533 L0.18538 0.24453 L0.18296 0.24348 L0.18072 0.24218 L0.17856 0.24062 Z M-0.24491 0.21631 L-0.25991 0.20650 L-0.27356 0.20065 L-0.27356 0.25652 L-0.25936 0.27065 L-0.25073 0.27779 L-0.24044 0.28464 L-0.22843 0.29045 L-0.22176 0.29274 L-0.21465 0.29449 L-0.20708 0.29561 L-0.19906 0.29600 L-0.19103 0.29561 L-0.18346 0.29449 L-0.17635 0.29274 L-0.16969 0.29045 L-0.15767 0.28464 L-0.14738 0.27779 L-0.11947 0.25206 L-0.11731 0.25050 L-0.11507 0.24920 L-0.11265 0.24815 L-0.10999 0.24735 L-0.10700 0.24678 L-0.09971 0.24634 L-0.19906 0.24634 L-0.20635 0.24589 L-0.20934 0.24533 L-0.21200 0.24453 L-0.21441 0.24348 L-0.21666 0.24218 L-0.21882 0.24062 Z M0.27790 0.12790 L0.28006 0.12634 L0.28231 0.12504 L0.28472 0.12400 L0.28739 0.12319 L0.29038 0.12263 L0.29766 0.12218 L0.29766 0.07252 L0.28964 0.07292 L0.28207 0.07403 L0.27496 0.07578 L0.26829 0.07807 L0.25628 0.08388 L0.24599 0.09073 L0.21808 0.11647 L0.21592 0.11802 L0.21368 0.11932 L0.21126 0.12037 L0.20860 0.12118 L0.20561 0.12174 L0.20221 0.12207 L0.19443 0.12207 L0.19103 0.12174 L0.18804 0.12118 L0.18538 0.12037 L0.18296 0.11932 L0.18072 0.11802 L0.17856 0.11647 L0.15065 0.09073 L0.14036 0.08388 L0.12835 0.07807 L0.12168 0.07578 L0.11457 0.07403 L0.10700 0.07292 L0.09898 0.07252 L0.09898 0.12218 L0.10627 0.12263 L0.10926 0.12319 L0.11192 0.12400 L0.11433 0.12504 L0.11658 0.12634 L0.11874 0.12790 L0.14664 0.15364 L0.15694 0.16049 L0.16895 0.16630 L0.17562 0.16859 L0.18273 0.17033 L0.19029 0.17145 L0.19832 0.17185 L0.20635 0.17145 L0.21391 0.17033 L0.22103 0.16859 L0.22769 0.16630 L0.23970 0.16049 L0.25000 0.15364 Z M-0.04803 0.21489 L-0.05833 0.20804 L-0.07034 0.20222 L-0.07701 0.19994 L-0.08412 0.19819 L-0.09169 0.19707 L-0.09971 0.19668 L-0.10774 0.19707 L-0.11530 0.19819 L-0.12242 0.19994 L-0.12908 0.20222 L-0.14110 0.20804 L-0.15139 0.21489 L-0.17930 0.24062 L-0.18145 0.24218 L-0.18370 0.24348 L-0.18611 0.24453 L-0.18878 0.24533 L-0.19177 0.24589 L-0.19906 0.24634 L-0.00037 0.24634 L-0.00530 0.24610 L-0.00935 0.24542 L-0.01197 0.24465 L-0.01607 0.24292 L-0.01909 0.24107 Z M-0.09971 0.24634 L-0.00037 0.24634 L-0.19906 0.24634 Z M0.09898 0.24634 L0.19832 0.24634 L-0.00037 0.24634 Z M0.27283 0.25652 L0.27283 0.20065 L0.25917 0.20650 L0.24418 0.21631 L0.21808 0.24062 L0.21592 0.24218 L0.21368 0.24348 L0.21126 0.24453 L0.20860 0.24533 L0.20561 0.24589 L0.19832 0.24634 L0.09898 0.24634 L0.10627 0.24678 L0.10926 0.24735 L0.11192 0.24815 L0.11433 0.24920 L0.11658 0.25050 L0.11874 0.25206 L0.14664 0.27779 L0.15694 0.28464 L0.16895 0.29045 L0.17562 0.29274 L0.18273 0.29449 L0.19029 0.29561 L0.19832 0.29600 L0.20635 0.29561 L0.21391 0.29449 L0.22103 0.29274 L0.22769 0.29045 L0.23970 0.28464 L0.25000 0.27779 L0.25862 0.27065 Z M0.09169 0.24678 L0.09898 0.24634 L-0.00037 0.24634 L-0.09971 0.24634 L-0.09242 0.24678 L-0.08943 0.24735 L-0.08677 0.24815 L-0.08436 0.24920 L-0.08211 0.25050 L-0.07995 0.25206 L-0.05444 0.27588 L-0.04600 0.28200 L-0.03629 0.28757 L-0.02523 0.29207 L-0.01919 0.29376 L-0.00771 0.29580 L0.00766 0.29561 L0.01522 0.29449 L0.02234 0.29274 L0.02900 0.29045 L0.04102 0.28464 L0.05131 0.27779 L0.07922 0.25206 L0.08137 0.25050 L0.08362 0.24920 L0.08603 0.24815 L0.08870 0.24735 Z"/></svg>
-    <svg style="position: absolute; left: 36.923%; width: 6.154%; top: 73.333%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M-0.20480 -0.12828 L-0.20480 -0.26485 L-0.24920 -0.22046 L-0.36189 -0.33313 L-0.40970 -0.28533 L-0.29701 -0.17266 L-0.34140 -0.12828 Z M0.05692 0.14860 L0.06136 0.14090 L0.06476 0.13269 L0.06707 0.12410 L0.06824 0.11523 L0.06824 0.10621 L0.06707 0.09733 L0.06476 0.08874 L0.06136 0.08054 L0.05692 0.07283 L0.05147 0.06573 L0.04509 0.05935 L0.03799 0.05391 L0.03028 0.04946 L0.02207 0.04607 L0.01348 0.04376 L0.00460 0.04258 L-0.00155 0.04250 L-0.00449 0.04297 L-0.01239 0.04531 L-0.01534 0.04578 L-0.01698 0.04585 L-0.11943 -0.05658 L-0.09198 -0.07150 L-0.06378 -0.08263 L-0.03406 -0.09072 L-0.03406 -0.02585 L0.03424 -0.02585 L0.03424 -0.09072 L0.05719 -0.08635 L0.07217 -0.08161 L0.10052 -0.06864 L0.11962 -0.05658 L0.07864 -0.01561 L0.12645 0.03219 L0.16743 -0.00878 L0.18235 0.01866 L0.19348 0.04686 L0.20158 0.07658 L0.13669 0.07658 L0.13669 0.14486 L0.20158 0.14486 L0.19720 0.16780 L0.19247 0.18278 L0.17949 0.21112 L0.16743 0.23022 L0.12645 0.18925 L0.07864 0.23705 L0.15316 0.30503 L0.16753 0.29352 L0.19333 0.26726 L0.21483 0.23709 L0.23160 0.20354 L0.24321 0.16712 L0.24922 0.12836 L0.24945 0.09177 L0.24515 0.05930 L0.23670 0.02786 L0.22427 -0.00215 L0.20801 -0.03035 L0.18809 -0.05635 L0.16475 -0.07968 L0.13874 -0.09960 L0.11053 -0.11586 L0.08052 -0.12829 L0.04908 -0.13673 L0.01660 -0.14104 L-0.01641 -0.14104 L-0.04889 -0.13673 L-0.08033 -0.12829 L-0.11035 -0.11586 L-0.13855 -0.09960 L-0.16456 -0.07968 L-0.18790 -0.05635 L-0.20782 -0.03035 L-0.22408 -0.00215 L-0.23651 0.02786 L-0.24496 0.05930 L-0.24926 0.09177 L-0.24904 0.12836 L-0.24302 0.16712 L-0.23141 0.20354 L-0.21464 0.23709 L-0.19314 0.26726 L-0.16734 0.29352 L-0.15297 0.30503 L-0.07845 0.23705 L-0.12626 0.18925 L-0.16724 0.23022 L-0.18216 0.20278 L-0.19329 0.17458 L-0.20139 0.14486 L-0.13650 0.14486 L-0.13650 0.07658 L-0.20139 0.07658 L-0.19701 0.05364 L-0.19228 0.03866 L-0.17930 0.01032 L-0.16724 -0.00878 L-0.06479 0.09365 L-0.06623 0.09681 L-0.06753 0.10090 L-0.06796 0.10347 L-0.06806 0.11523 L-0.06688 0.12410 L-0.06457 0.13269 L-0.06117 0.14090 L-0.05673 0.14860 L-0.05129 0.15571 L-0.04491 0.16209 L-0.03780 0.16753 L-0.03009 0.17197 L-0.02189 0.17537 L-0.01329 0.17768 L-0.00442 0.17885 L0.00460 0.17885 L0.01348 0.17768 L0.02207 0.17537 L0.03028 0.17197 L0.03799 0.16753 L0.04509 0.16209 L0.05147 0.15571 Z"/></svg>
-    <svg style="position: absolute; left: 56.923%; width: 6.154%; top: 61.667%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M-0.24800 0.13600 L-0.17600 0.13600 L-0.17600 0.22400 L-0.07200 0.22400 L-0.05600 0.24000 L-0.07200 0.25600 L-0.17600 0.25600 L-0.17600 0.34400 L-0.24800 0.34400 Z M-0.02400 0.24000 L-0.09600 0.31200 L-0.07200 0.33600 L-0.00000 0.26400 L0.07200 0.33600 L0.09600 0.31200 L0.02400 0.24000 L0.09600 0.16800 L0.07200 0.14400 L0.00000 0.21600 L-0.07200 0.14400 L-0.09600 0.16800 Z M0.24800 0.13600 L0.17600 0.13600 L0.17600 0.22400 L0.07200 0.22400 L0.05600 0.24000 L0.07200 0.25600 L0.17600 0.25600 L0.17600 0.34400 L0.24800 0.34400 Z M0.00000 0.18400 L0.01600 0.16800 L0.01600 -0.22400 L0.17040 -0.22400 L0.15017 -0.14783 L0.21972 -0.12919 L0.27355 -0.33010 L0.20401 -0.34874 L0.17920 -0.25600 L-0.17040 -0.25600 L-0.15017 -0.33217 L-0.21972 -0.35081 L-0.27355 -0.14990 L-0.20401 -0.13126 L-0.17920 -0.22400 L-0.01600 -0.22400 L-0.01600 0.16800 Z"/></svg>
-    <svg style="position: absolute; left: 13.077%; width: 6.154%; top: 51.667%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M-0.05955 -0.24869 L0.09568 -0.24869 L-0.15268 -0.24869 Z M0.00254 -0.24869 L0.09568 -0.24869 L-0.05955 -0.24869 Z M0.34404 0.15481 L0.34404 -0.15558 L0.25090 -0.15558 L0.25090 -0.06246 L0.18881 -0.06246 L0.12672 0.12377 L-0.02850 0.12377 L-0.12164 0.12377 L-0.05955 0.18585 L0.18881 0.18585 L0.18881 0.06169 L0.25090 0.06169 L0.25090 0.15481 Z M-0.15268 -0.24869 L0.09568 -0.24869 L0.09568 -0.31077 L-0.15268 -0.31077 Z M-0.15268 -0.09350 L-0.12164 -0.12454 L0.12672 -0.12454 L0.12672 0.12377 L0.18881 -0.06246 L0.18881 -0.18662 L0.00254 -0.18662 L0.00254 -0.24869 L-0.05955 -0.24869 L-0.05955 -0.18662 L-0.15268 -0.18662 L-0.21477 -0.12454 L-0.21477 -0.03142 L-0.27687 -0.03142 L-0.27687 -0.12454 L-0.33896 -0.12454 L-0.33896 0.12377 L-0.27687 0.12377 L-0.27687 0.03065 L-0.21477 0.03065 L-0.21477 0.12377 L-0.02850 0.12377 L-0.09059 0.06169 L-0.15268 0.06169 Z M-0.12164 0.12377 L-0.02850 0.12377 L-0.21477 0.12377 Z"/></svg>
-    <svg style="position: absolute; left: 80.769%; width: 6.154%; top: 38.333%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M-0.07329 -0.19776 L0.15024 -0.19776 L-0.12917 -0.19776 Z M0.09436 -0.19776 L0.15024 -0.19776 L-0.07329 -0.19776 Z M0.23733 -0.14808 L0.23925 -0.14924 L0.24137 -0.15018 L0.24370 -0.15090 L0.24622 -0.15138 L0.22256 -0.15105 L0.22061 -0.14731 L0.21922 -0.14323 L0.21839 -0.13882 L0.21811 -0.13410 L0.21842 -0.12915 L0.21933 -0.12450 L0.22082 -0.12015 L0.22285 -0.11615 L0.22539 -0.11252 L0.24611 -0.11519 L0.24353 -0.11598 L0.24117 -0.11696 L0.23903 -0.11814 L0.23713 -0.11951 L0.23546 -0.12107 L0.23403 -0.12283 L0.23286 -0.12477 L0.23193 -0.12690 L0.23127 -0.12923 L0.23086 -0.13173 L0.23073 -0.13443 L0.23087 -0.13692 L0.23130 -0.13925 L0.23200 -0.14140 L0.23297 -0.14336 L0.23418 -0.14514 L0.23564 -0.14671 Z M0.29249 -0.00987 L0.29081 -0.01441 L0.28863 -0.01880 L0.28594 -0.02318 L0.27185 -0.02318 L0.27662 -0.01469 L0.27836 -0.01044 L0.27964 -0.00617 L0.28043 -0.00185 L0.28070 0.00254 L0.28054 0.00594 L0.28007 0.00910 L0.27929 0.01203 L0.27820 0.01471 L0.27681 0.01714 L0.27511 0.01933 L0.27310 0.02128 L0.27079 0.02298 L0.26819 0.02443 L0.26528 0.02563 L0.26208 0.02658 L0.25858 0.02728 L0.25858 -0.02449 L0.25207 -0.02424 L0.24614 -0.02348 L0.24078 -0.02224 L0.23600 -0.02054 L0.23179 -0.01840 L0.22815 -0.01583 L0.24891 -0.01008 L0.24891 0.02695 L0.22539 0.02904 L0.22843 0.03228 L0.23194 0.03509 L0.23588 0.03745 L0.24023 0.03934 L0.24496 0.04072 L0.25005 0.04157 L0.25547 0.04186 L0.26051 0.04159 L0.26542 0.04081 L0.27016 0.03950 L0.27465 0.03770 L0.27884 0.03539 L0.28266 0.03260 L0.28607 0.02933 L0.28899 0.02560 L0.29136 0.02140 L0.29313 0.01675 L0.29424 0.01166 L0.29462 0.00614 L0.29439 0.00026 L0.29368 -0.00503 Z M0.13864 -0.23196 L0.13393 -0.23732 L0.12857 -0.24203 L0.12263 -0.24603 L0.11617 -0.24926 L0.10926 -0.25164 L0.10197 -0.25312 L-0.08084 -0.25312 L-0.08810 -0.25164 L-0.09499 -0.24926 L-0.10144 -0.24603 L-0.10738 -0.24203 L-0.11275 -0.23732 L-0.11749 -0.23196 L-0.12151 -0.22603 L-0.12476 -0.21957 L-0.12716 -0.21266 L-0.12866 -0.20537 L-0.12917 -0.19776 L0.15024 -0.19776 L0.14973 -0.20537 L0.14825 -0.21266 L0.14587 -0.21957 L0.14264 -0.22603 Z M0.28845 0.12648 L0.28504 0.11954 L0.28084 0.11331 L0.27597 0.10782 L0.27049 0.10310 L0.26451 0.09918 L0.25811 0.09608 L0.25138 0.09383 L0.24440 0.09246 L0.23728 0.09199 L0.23064 0.09237 L0.22398 0.09353 L0.21742 0.09548 L0.21107 0.09824 L0.20505 0.10182 L0.19946 0.10625 L0.19442 0.11153 L0.19004 0.11770 L0.18643 0.12475 L0.18372 0.13272 L0.18201 0.14162 L0.18141 0.19488 L0.29315 0.19488 L0.27873 0.15327 L0.27873 0.17882 L0.19583 0.17882 L0.19622 0.14662 L0.19734 0.13985 L0.19915 0.13377 L0.20159 0.12837 L0.20460 0.12364 L0.20814 0.11958 L0.21214 0.11616 L0.21656 0.11339 L0.22134 0.11126 L0.22642 0.10974 L0.23175 0.10884 L0.23728 0.10854 L0.24099 0.10872 L0.24513 0.10933 L0.24956 0.11041 L0.25414 0.11205 L0.25873 0.11431 L0.26317 0.11726 L0.26732 0.12097 L0.27104 0.12551 L0.27419 0.13093 L0.27662 0.13732 L0.27818 0.14475 L0.29315 0.15130 L0.29260 0.14239 L0.29100 0.13411 Z M0.27873 0.15327 L0.29315 0.19488 L0.29315 0.15130 L0.27818 0.14475 Z M0.20167 0.07392 L0.20259 0.07329 L0.20343 0.07256 L0.20417 0.07172 L0.20479 0.07080 L0.20530 0.06980 L0.20568 0.06873 L0.20591 0.06760 L0.20599 0.06643 L0.20591 0.06527 L0.20568 0.06414 L0.20530 0.06307 L0.20479 0.06207 L0.20417 0.06115 L0.20343 0.06031 L0.20259 0.05957 L0.20167 0.05895 L0.20067 0.05844 L0.19960 0.05806 L0.19848 0.05783 L0.19731 0.05775 L0.19614 0.05783 L0.19501 0.05806 L0.19395 0.05844 L0.19294 0.05895 L0.19202 0.05957 L0.19118 0.06031 L0.19045 0.06115 L0.18982 0.06207 L0.18931 0.06307 L0.18894 0.06414 L0.18870 0.06527 L0.18862 0.06643 L0.18870 0.06760 L0.18894 0.06873 L0.18931 0.06980 L0.18982 0.07080 L0.19045 0.07172 L0.19118 0.07256 L0.19202 0.07329 L0.19294 0.07392 L0.19395 0.07443 L0.19501 0.07480 L0.19614 0.07504 L0.19731 0.07512 L0.19848 0.07504 L0.19960 0.07480 L0.20067 0.07443 Z M0.24611 0.02636 L0.24353 0.02557 L0.24117 0.02459 L0.23903 0.02341 L0.23713 0.02204 L0.23546 0.02048 L0.23403 0.01872 L0.23286 0.01678 L0.23193 0.01465 L0.23127 0.01233 L0.23086 0.00982 L0.23073 0.00713 L0.23087 0.00463 L0.23130 0.00230 L0.23200 0.00015 L0.23297 -0.00181 L0.23418 -0.00359 L0.23564 -0.00516 L0.23733 -0.00653 L0.23925 -0.00769 L0.24137 -0.00863 L0.24370 -0.00935 L0.24622 -0.00983 L0.24891 -0.01008 L0.22815 -0.01583 L0.22507 -0.01286 L0.22256 -0.00949 L0.22061 -0.00576 L0.21922 -0.00168 L0.21839 0.00273 L0.21811 0.00745 L0.21842 0.01240 L0.21933 0.01706 L0.22082 0.02140 L0.22285 0.02540 L0.22539 0.02904 L0.24891 0.02695 Z M-0.17192 -0.00023 L-0.17881 0.00215 L-0.18526 0.00538 L-0.19120 0.00938 L-0.19658 0.01409 L-0.20131 0.01945 L-0.20533 0.02539 L-0.20858 0.03184 L-0.21099 0.03875 L-0.21248 0.04604 L-0.21305 0.18120 L-0.21353 0.18483 L-0.21448 0.18835 L-0.21587 0.19170 L-0.21768 0.19486 L-0.21991 0.19776 L-0.22252 0.20037 L-0.22543 0.20260 L-0.22858 0.20442 L-0.23194 0.20581 L-0.23545 0.20675 L-0.23909 0.20723 L-0.24278 0.20723 L-0.24641 0.20675 L-0.24992 0.20581 L-0.25328 0.20442 L-0.25643 0.20260 L-0.25934 0.20037 L-0.26195 0.19776 L-0.26418 0.19486 L-0.26600 0.19170 L-0.26739 0.18835 L-0.26833 0.18483 L-0.26881 0.18120 L-0.26887 -0.02205 L-0.26001 -0.01892 L-0.25072 -0.01690 L-0.24589 -0.01637 L-0.23632 -0.01634 L-0.22724 -0.01754 L-0.21845 -0.01990 L-0.21006 -0.02337 L-0.20218 -0.02792 L-0.19491 -0.03348 L-0.18838 -0.04001 L-0.18282 -0.04728 L-0.17827 -0.05516 L-0.17480 -0.06355 L-0.17347 -0.06790 L-0.21672 -0.07207 L-0.21875 -0.06904 L-0.22117 -0.06627 L-0.22252 -0.06501 L-0.22543 -0.06278 L-0.22858 -0.06096 L-0.23194 -0.05957 L-0.23545 -0.05863 L-0.23909 -0.05815 L-0.24278 -0.05815 L-0.24641 -0.05863 L-0.24992 -0.05957 L-0.25328 -0.06096 L-0.25643 -0.06278 L-0.25934 -0.06501 L-0.26195 -0.06762 L-0.26418 -0.07052 L-0.26600 -0.07368 L-0.26739 -0.07703 L-0.26833 -0.08055 L-0.26881 -0.08418 L-0.26881 -0.08787 L-0.26833 -0.09150 L-0.26739 -0.09501 L-0.26600 -0.09837 L-0.26418 -0.10152 L-0.26195 -0.10443 L-0.25934 -0.10703 L-0.25643 -0.10926 L-0.25328 -0.11108 L-0.24992 -0.11247 L-0.24641 -0.11341 L-0.24278 -0.11389 L-0.23909 -0.11389 L-0.23545 -0.11341 L-0.23194 -0.11247 L-0.22858 -0.11108 L-0.22543 -0.10926 L-0.22252 -0.10703 L-0.21991 -0.10443 L-0.21768 -0.10152 L-0.21587 -0.09837 L-0.21448 -0.09501 L-0.21353 -0.09150 L-0.21305 -0.08787 L-0.21305 -0.08418 L-0.21353 -0.08055 L-0.17169 -0.07684 L-0.17108 -0.08602 L-0.17146 -0.09340 L-0.17259 -0.10058 L-0.17441 -0.10750 L-0.17691 -0.11413 L-0.18002 -0.12042 L-0.18372 -0.12632 L-0.18797 -0.13179 L-0.19273 -0.13678 L-0.19795 -0.14125 L-0.20361 -0.14516 L-0.20966 -0.14846 L-0.21606 -0.15111 L-0.15711 -0.21005 L-0.18673 -0.23966 L-0.29067 -0.13574 L-0.29039 -0.13547 L-0.29626 -0.12878 L-0.30126 -0.12134 L-0.30530 -0.11326 L-0.30829 -0.10461 L-0.31014 -0.09550 L-0.31062 -0.09080 L-0.31063 0.18397 L-0.30943 0.19305 L-0.30707 0.20183 L-0.30359 0.21022 L-0.29905 0.21810 L-0.29348 0.22537 L-0.28695 0.23189 L-0.27968 0.23746 L-0.27180 0.24201 L-0.26341 0.24548 L-0.25462 0.24784 L-0.24554 0.24904 L-0.23632 0.24904 L-0.22724 0.24784 L-0.21845 0.24548 L-0.21006 0.24201 L-0.20218 0.23746 L-0.19491 0.23189 L-0.18838 0.22537 L-0.18282 0.21810 L-0.17827 0.21022 L-0.17480 0.20183 L-0.17243 0.19305 L-0.17123 0.18397 L-0.17108 0.03969 L-0.12917 0.03969 L-0.12917 0.24920 L0.15024 0.24920 L0.15024 -0.19776 L0.09436 -0.19776 L0.09436 -0.05809 L-0.07329 -0.05809 L-0.07329 -0.19776 L-0.12917 -0.19776 L-0.12917 -0.00222 L-0.16467 -0.00171 Z M-0.17169 -0.07684 L-0.21353 -0.08055 L-0.21448 -0.07703 L-0.21587 -0.07368 L-0.21672 -0.07207 L-0.17347 -0.06790 Z M0.23089 -0.06168 L0.23109 -0.06457 L0.23169 -0.06779 L0.23271 -0.07129 L0.23419 -0.07502 L0.23859 -0.08298 L0.22417 -0.08298 L0.22078 -0.07548 L0.21877 -0.06831 L0.21828 -0.06481 L0.21811 -0.06136 L0.21827 -0.05778 L0.21873 -0.05444 L0.21949 -0.05135 L0.22053 -0.04852 L0.22185 -0.04596 L0.22344 -0.04370 L0.22529 -0.04175 L0.22738 -0.04012 L0.22972 -0.03882 L0.23230 -0.03788 L0.23509 -0.03730 L0.23810 -0.03711 L0.24277 -0.03779 L0.24690 -0.03966 L0.25056 -0.04248 L0.25383 -0.04603 L0.26646 -0.06614 L0.26872 -0.06896 L0.27104 -0.07084 L0.27349 -0.07151 L0.27475 -0.07141 L0.27591 -0.07112 L0.27696 -0.07065 L0.27791 -0.07002 L0.27876 -0.06924 L0.27951 -0.06832 L0.28015 -0.06728 L0.28070 -0.06613 L0.28114 -0.06488 L0.28148 -0.06355 L0.28184 -0.06070 L0.28158 -0.05753 L0.28079 -0.05395 L0.27947 -0.05001 L0.27760 -0.04577 L0.27218 -0.03662 L0.28791 -0.03662 L0.29183 -0.04546 L0.29311 -0.04958 L0.29397 -0.05366 L0.29462 -0.06217 L0.29445 -0.06558 L0.29392 -0.06881 L0.29306 -0.07184 L0.29189 -0.07465 L0.29042 -0.07722 L0.28866 -0.07952 L0.28664 -0.08153 L0.28436 -0.08323 L0.28184 -0.08459 L0.27909 -0.08559 L0.27614 -0.08621 L0.27300 -0.08642 L0.27116 -0.08633 L0.26941 -0.08604 L0.26772 -0.08554 L0.26608 -0.08483 L0.26447 -0.08388 L0.26286 -0.08270 L0.25960 -0.07955 L0.25615 -0.07531 L0.24338 -0.05609 L0.24121 -0.05377 L0.24024 -0.05299 L0.23932 -0.05244 L0.23844 -0.05212 L0.23761 -0.05202 L0.23665 -0.05209 L0.23575 -0.05232 L0.23490 -0.05270 L0.23412 -0.05321 L0.23341 -0.05386 L0.23278 -0.05464 L0.23222 -0.05554 L0.23176 -0.05656 L0.23139 -0.05768 L0.23112 -0.05892 Z M0.22256 -0.15105 L0.24622 -0.15138 L0.24891 -0.15163 L0.24891 -0.11460 L0.24611 -0.11519 L0.22539 -0.11252 L0.22843 -0.10928 L0.23194 -0.10646 L0.23588 -0.10410 L0.24023 -0.10221 L0.24496 -0.10083 L0.25005 -0.09998 L0.25547 -0.09969 L0.26051 -0.09996 L0.26542 -0.10075 L0.27016 -0.10205 L0.27465 -0.10386 L0.27884 -0.10616 L0.28266 -0.10895 L0.28607 -0.11222 L0.28899 -0.11595 L0.29136 -0.12015 L0.29313 -0.12480 L0.29424 -0.12989 L0.29462 -0.13541 L0.29439 -0.14129 L0.29368 -0.14658 L0.29249 -0.15142 L0.29081 -0.15597 L0.28863 -0.16036 L0.28594 -0.16473 L0.27185 -0.16473 L0.27662 -0.15625 L0.27836 -0.15200 L0.27964 -0.14772 L0.28043 -0.14340 L0.28070 -0.13901 L0.28054 -0.13561 L0.28007 -0.13245 L0.27929 -0.12953 L0.27820 -0.12685 L0.27681 -0.12441 L0.27511 -0.12222 L0.27310 -0.12027 L0.27079 -0.11858 L0.26819 -0.11713 L0.26528 -0.11592 L0.26208 -0.11497 L0.25858 -0.11427 L0.25858 -0.16605 L0.25207 -0.16579 L0.24614 -0.16503 L0.24078 -0.16380 L0.23600 -0.16210 L0.23179 -0.15995 L0.22815 -0.15738 L0.22507 -0.15441 Z M0.21959 0.07381 L0.29315 0.07381 L0.29315 0.05923 L0.21959 0.05923 Z M0.18141 -0.18210 L0.29315 -0.18210 L0.29315 -0.19668 L0.18141 -0.19668 Z"/></svg>
-    <svg style="position: absolute; left: 43.077%; width: 6.154%; top: 33.333%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M0.24156 -0.07246 L0.24156 -0.27111 L-0.25516 0.22551 L0.14221 0.22551 L0.14221 0.17585 L-0.13480 0.17585 L0.19189 -0.15192 L0.19189 -0.07246 Z M0.19189 0.12618 L0.24156 0.12618 L0.24156 -0.02280 L0.19189 -0.02280 Z M0.19189 0.22551 L0.24156 0.22551 L0.24156 0.17585 L0.19189 0.17585 Z"/></svg>
-    <svg style="position: absolute; left: 50.769%; width: 6.154%; top: 33.333%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M-0.09314 0.12415 L-0.03105 0.12415 L-0.03105 -0.12415 L-0.09314 -0.12415 Z M0.23377 0.27712 L0.24142 0.27445 L0.24859 0.27084 L0.25519 0.26637 L0.26116 0.26111 L0.26642 0.25514 L0.27089 0.24854 L0.27450 0.24137 L0.27717 0.23372 L0.27883 0.22566 L0.27940 -0.21727 L0.21731 -0.21727 L0.21731 0.21727 L-0.21732 0.21727 L-0.21732 -0.21727 L-0.27941 -0.21727 L-0.27884 0.22566 L-0.27718 0.23372 L-0.27451 0.24137 L-0.27090 0.24854 L-0.26643 0.25514 L-0.26117 0.26111 L-0.25520 0.26637 L-0.24859 0.27084 L-0.24143 0.27445 L-0.23378 0.27712 L-0.22571 0.27878 L0.22571 0.27878 Z M-0.21732 -0.21727 L0.27940 -0.21727 L-0.27941 -0.21727 Z M0.21731 -0.21727 L0.27940 -0.21727 L-0.21732 -0.21727 Z M0.03104 0.12415 L0.09313 0.12415 L0.09313 -0.12415 L0.03104 -0.12415 Z M0.27940 -0.21727 L0.27883 -0.22566 L0.27717 -0.23372 L0.27450 -0.24137 L0.27089 -0.24854 L0.26642 -0.25514 L0.26116 -0.26111 L0.25519 -0.26637 L0.24859 -0.27084 L0.24142 -0.27445 L0.23377 -0.27712 L0.22571 -0.27878 L-0.22571 -0.27878 L-0.23378 -0.27712 L-0.24143 -0.27445 L-0.24859 -0.27084 L-0.25520 -0.26637 L-0.26117 -0.26111 L-0.26643 -0.25514 L-0.27090 -0.24854 L-0.27451 -0.24137 L-0.27718 -0.23372 L-0.27884 -0.22566 L-0.27941 -0.21727 Z"/></svg>
-    <svg style="position: absolute; left: 72.308%; width: 6.154%; top: 1.667%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M0.00613 0.06029 L0.00298 0.02004 L0.00613 -0.06522 L0.01161 -0.09901 L-0.04920 -0.11006 L-0.05696 -0.05781 L-0.05955 -0.00246 L-0.05696 0.05289 L-0.04920 0.10514 L0.01496 0.10850 Z M0.09740 -0.21909 L0.06517 -0.22421 L0.03359 -0.22594 L0.00513 -0.21715 L-0.01816 -0.19283 L-0.03627 -0.15610 L-0.04920 -0.11006 L0.01161 -0.09901 L0.01856 -0.12616 L0.02612 -0.14650 L0.02985 -0.15406 L0.03341 -0.15986 L0.03669 -0.16386 L0.05982 -0.16199 L0.10814 -0.15174 L0.13224 -0.14340 L0.15556 -0.13295 L0.17756 -0.12041 L0.19768 -0.10580 L0.21537 -0.08914 L0.23009 -0.07046 L0.24129 -0.04977 L0.24841 -0.02710 L0.25090 -0.00246 L0.24841 0.02217 L0.24129 0.04484 L0.23009 0.06553 L0.21537 0.08422 L0.19768 0.10087 L0.17756 0.11548 L0.15556 0.12803 L0.13224 0.13848 L0.10814 0.14681 L0.05982 0.15707 L0.03669 0.15894 L0.03341 0.15493 L0.02985 0.14914 L0.02232 0.13227 L0.01496 0.10850 L-0.04920 0.10514 L-0.03627 0.15118 L-0.01816 0.18791 L0.00513 0.21222 L0.03359 0.22102 L0.06517 0.21929 L0.09740 0.21416 L0.12963 0.20574 L0.16122 0.19411 L0.19151 0.17939 L0.21986 0.16165 L0.24562 0.14101 L0.26815 0.11755 L0.28680 0.09138 L0.30092 0.06259 L0.30987 0.03128 L0.31299 -0.00246 L0.30987 -0.03620 L0.30092 -0.06751 L0.28680 -0.09631 L0.26815 -0.12248 L0.24562 -0.14593 L0.21986 -0.16658 L0.19151 -0.18431 L0.16122 -0.19904 L0.12963 -0.21066 Z M-0.09554 -0.17162 L-0.09370 -0.17628 L-0.09167 -0.18510 L-0.08887 -0.19306 L-0.07507 -0.21973 L-0.30791 -0.21973 L-0.30791 -0.15766 L-0.09991 -0.15766 L-0.09806 -0.16231 Z M-0.30791 -0.03350 L-0.12164 -0.03350 L-0.11543 -0.09558 L-0.30791 -0.09558 Z M-0.09991 0.15273 L-0.30481 0.15273 L-0.30481 0.21481 L-0.07197 0.21481 L-0.08335 0.19595 L-0.09266 0.17572 Z M-0.12164 0.02858 L-0.30791 0.02858 L-0.30791 0.09065 L-0.11543 0.09065 Z"/></svg>
-    <svg style="position: absolute; left: 21.538%; width: 6.154%; top: 1.667%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M0.03612 -0.14650 L0.03985 -0.15406 L0.04341 -0.15986 L-0.02627 -0.15610 L-0.03920 -0.11006 L-0.04696 -0.05782 L-0.04955 -0.00246 L-0.04696 0.05289 L0.01421 0.04096 L0.01298 -0.02496 L0.02161 -0.09901 L0.02856 -0.12616 Z M0.04359 0.22101 L0.07517 0.21928 L0.10740 0.21416 L0.13963 0.20574 L0.17122 0.19411 L0.20151 0.17939 L0.22986 0.16165 L0.25562 0.14101 L0.27815 0.11755 L0.29680 0.09138 L0.31092 0.06259 L0.31987 0.03128 L0.32299 -0.00246 L0.31987 -0.03620 L0.31092 -0.06751 L0.29680 -0.09631 L0.27815 -0.12248 L0.25562 -0.14594 L0.22986 -0.16658 L0.20151 -0.18431 L0.17122 -0.19904 L0.13963 -0.21066 L0.10740 -0.21909 L0.07517 -0.22421 L0.04359 -0.22594 L0.01513 -0.21715 L-0.00816 -0.19283 L-0.02627 -0.15610 L0.04341 -0.15986 L0.04669 -0.16386 L0.06982 -0.16199 L0.11814 -0.15174 L0.14224 -0.14340 L0.16556 -0.13295 L0.18756 -0.12041 L0.20768 -0.10580 L0.22537 -0.08914 L0.24009 -0.07046 L0.25129 -0.04977 L0.25841 -0.02710 L0.26090 -0.00246 L0.25835 0.02217 L0.25107 0.04484 L0.23965 0.06553 L0.22468 0.08421 L0.20673 0.10087 L0.18639 0.11548 L0.16424 0.12802 L0.11683 0.14681 L0.06917 0.15707 L0.04669 0.15894 L0.04341 0.15493 L0.03985 0.14914 L0.03232 0.13227 L0.02496 0.10850 L0.01421 0.04096 L-0.04696 0.05289 L-0.03920 0.10514 L-0.02627 0.15118 L-0.00816 0.18791 L0.01513 0.21222 Z M-0.28549 0.05961 L-0.11474 0.01616 L-0.11164 -0.04902 L-0.30101 0.00064 Z M-0.09301 -0.14524 L-0.07967 -0.19387 L-0.07427 -0.20628 L-0.06818 -0.21663 L-0.29791 -0.15766 L-0.28239 -0.09868 Z M-0.10141 0.12767 L-0.10543 0.10617 L-0.30101 0.15583 L-0.28549 0.21481 L-0.08991 0.16514 Z"/></svg>
-    <svg style="position: absolute; left: 2.308%; width: 6.154%; top: 51.667%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M0.23227 -0.07540 L0.30140 -0.03596 L0.30541 -0.03464 L0.30944 -0.03387 L0.31346 -0.03364 L0.31743 -0.03392 L0.32130 -0.03470 L0.32502 -0.03597 L0.32856 -0.03771 L0.33187 -0.03990 L0.33491 -0.04252 L0.33763 -0.04557 L0.34000 -0.04902 L0.34183 -0.05296 L0.34314 -0.05698 L0.34393 -0.06103 L0.34420 -0.06508 L0.34396 -0.06907 L0.34322 -0.07296 L0.34198 -0.07670 L0.34025 -0.08024 L0.33804 -0.08355 L0.33534 -0.08656 L0.33216 -0.08924 L0.22731 -0.15021 L0.05678 -0.05174 L0.12858 -0.02015 L0.06463 0.09065 L-0.21477 0.09065 L-0.21477 -0.00246 L-0.27686 -0.00246 L-0.27673 0.09475 L-0.27566 0.10282 L-0.27356 0.11063 L-0.27047 0.11809 L-0.26643 0.12509 L-0.26148 0.13155 L-0.25568 0.13735 L-0.24922 0.14230 L-0.24221 0.14634 L-0.23476 0.14943 L-0.22694 0.15153 L-0.21888 0.15259 L0.07039 0.15246 L0.07601 0.15168 L0.08146 0.15040 L0.08672 0.14865 L0.09176 0.14646 L0.10111 0.14084 L0.10929 0.13374 L0.11612 0.12537 Z M-0.02911 -0.16374 L-0.03016 -0.16764 L-0.03170 -0.17137 L-0.03372 -0.17488 L-0.03619 -0.17811 L-0.03909 -0.18100 L-0.04233 -0.18348 L-0.04583 -0.18550 L-0.04956 -0.18704 L-0.05346 -0.18809 L-0.05750 -0.18863 L-0.18578 -0.18863 L-0.18981 -0.18809 L-0.19372 -0.18704 L-0.19745 -0.18550 L-0.20095 -0.18348 L-0.20418 -0.18100 L-0.20708 -0.17811 L-0.20956 -0.17488 L-0.21158 -0.17137 L-0.21312 -0.16764 L-0.21417 -0.16374 L-0.21471 -0.15970 L-0.21471 -0.15561 L-0.21417 -0.15157 L-0.21312 -0.14767 L-0.21158 -0.14394 L-0.20956 -0.14043 L-0.20708 -0.13720 L-0.20418 -0.13431 L-0.20095 -0.13183 L-0.19745 -0.12981 L-0.19372 -0.12827 L-0.18981 -0.12722 L-0.18578 -0.12668 L-0.18373 -0.12662 L-0.05955 -0.12662 L-0.05750 -0.12668 L-0.05346 -0.12722 L-0.04956 -0.12827 L-0.04583 -0.12981 L-0.04233 -0.13183 L-0.03909 -0.13431 L-0.03619 -0.13720 L-0.03372 -0.14043 L-0.03170 -0.14394 L-0.03016 -0.14767 L-0.02911 -0.15157 L-0.02857 -0.15561 L-0.02857 -0.15970 Z M-0.15268 -0.12662 L-0.05955 -0.12662 L-0.18373 -0.12662 Z M-0.09059 -0.12662 L-0.05955 -0.12662 L-0.15268 -0.12662 Z M0.35390 0.16839 L0.35970 0.16259 L0.36465 0.15613 L0.36869 0.14913 L0.37178 0.14167 L0.37388 0.13386 L0.37495 0.12579 L0.37508 0.12169 L0.37386 0.11088 L0.37048 0.09931 L0.35898 0.07518 L0.34404 0.05189 L0.31299 0.01306 L0.28195 0.05189 L0.26700 0.07518 L0.25550 0.09931 L0.25212 0.11088 L0.25090 0.12169 L0.25104 0.12579 L0.25211 0.13386 L0.25420 0.14167 L0.25729 0.14913 L0.26133 0.15613 L0.26628 0.16259 L0.27208 0.16839 L0.27854 0.17334 L0.28555 0.17738 L0.29301 0.18047 L0.30082 0.18256 L0.30889 0.18363 L0.31709 0.18363 L0.32516 0.18256 L0.33297 0.18047 L0.34043 0.17738 L0.34744 0.17334 Z M0.12858 -0.02015 L0.05678 -0.05174 L0.02520 -0.03350 L0.02237 -0.03802 L0.01916 -0.04227 L0.01559 -0.04621 L0.00749 -0.05310 L-0.00174 -0.05852 L-0.00671 -0.06063 L-0.01190 -0.06231 L-0.01728 -0.06353 L-0.02282 -0.06428 L-0.09059 -0.06454 L-0.09059 -0.12662 L-0.15268 -0.12662 L-0.15268 -0.06454 L-0.21888 -0.06440 L-0.22694 -0.06334 L-0.23476 -0.06124 L-0.24221 -0.05815 L-0.24922 -0.05411 L-0.25568 -0.04916 L-0.26148 -0.04336 L-0.26643 -0.03690 L-0.27047 -0.02990 L-0.27356 -0.02244 L-0.27566 -0.01463 L-0.27673 -0.00656 L-0.27686 -0.00246 L-0.00708 -0.00246 L0.02117 0.04192 Z M-0.21477 -0.00246 L-0.00708 -0.00246 L-0.27686 -0.00246 Z M-0.27524 -0.15021 L-0.27909 -0.15096 L-0.28300 -0.15121 L-0.28691 -0.15096 L-0.29080 -0.15021 L-0.29461 -0.14894 L-0.29829 -0.14718 L-0.30181 -0.14491 L-0.30512 -0.14214 L-0.36091 -0.08589 L-0.36312 -0.08246 L-0.36484 -0.07882 L-0.36607 -0.07502 L-0.36680 -0.07113 L-0.36705 -0.06718 L-0.36680 -0.06323 L-0.36607 -0.05933 L-0.36484 -0.05554 L-0.36312 -0.05190 L-0.36091 -0.04847 L-0.35820 -0.04530 L-0.35503 -0.04259 L-0.35160 -0.04038 L-0.34796 -0.03866 L-0.34416 -0.03743 L-0.34027 -0.03670 L-0.33632 -0.03645 L-0.33237 -0.03670 L-0.32847 -0.03743 L-0.32467 -0.03866 L-0.32103 -0.04038 L-0.31760 -0.04259 L-0.26134 -0.09837 L-0.25857 -0.10167 L-0.25630 -0.10519 L-0.25453 -0.10888 L-0.25327 -0.11268 L-0.25251 -0.11657 L-0.25226 -0.12049 L-0.25251 -0.12439 L-0.25327 -0.12824 L-0.25453 -0.13198 L-0.25630 -0.13557 L-0.25857 -0.13897 L-0.26134 -0.14214 L-0.26450 -0.14491 L-0.26790 -0.14718 L-0.27150 -0.14894 Z"/></svg>
-    <svg style="position: absolute; left: 80.769%; width: 6.154%; top: 51.667%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M-0.23521 -0.23966 L-0.26380 -0.20714 L-0.28788 -0.17127 L-0.30716 -0.13246 L-0.32131 -0.09109 L-0.32636 -0.06957 L-0.33225 -0.02508 L-0.33225 0.02065 L-0.32636 0.06513 L-0.32131 0.08666 L-0.30716 0.12803 L-0.28788 0.16684 L-0.26380 0.20270 L-0.23521 0.23523 L-0.20447 0.20450 L-0.22932 0.17638 L-0.25052 0.14532 L-0.26769 0.11162 L-0.28043 0.07559 L-0.28836 0.03754 L-0.29040 0.01786 L-0.29040 -0.02229 L-0.28836 -0.04197 L-0.28043 -0.08002 L-0.26769 -0.11605 L-0.25052 -0.14975 L-0.22932 -0.18082 L-0.20447 -0.20893 Z M-0.05004 -0.19084 L-0.02445 -0.19599 L0.00229 -0.19776 L0.02903 -0.19599 L0.05461 -0.19084 L0.07882 -0.18253 L0.10142 -0.17127 L0.12221 -0.15730 L0.14094 -0.14084 L0.15741 -0.12211 L0.17138 -0.10133 L0.18263 -0.07873 L0.19095 -0.05453 L0.19610 -0.02895 L0.25147 -0.03650 L0.24483 -0.06934 L0.23411 -0.10042 L0.21960 -0.12947 L0.20161 -0.15620 L0.18041 -0.18030 L0.15630 -0.20149 L0.12957 -0.21949 L0.10052 -0.23399 L0.06942 -0.24471 L0.03658 -0.25135 L0.00229 -0.25363 L-0.03201 -0.25135 L-0.06485 -0.24471 L-0.09594 -0.23399 L-0.12500 -0.21949 L-0.15173 -0.20149 L-0.17583 -0.18030 L-0.19703 -0.15620 L-0.21503 -0.12947 L-0.22953 -0.10042 L-0.24025 -0.06934 L-0.24690 -0.03650 L-0.24918 -0.00222 L-0.24690 0.03207 L-0.24025 0.06490 L-0.22953 0.09599 L-0.21503 0.12504 L-0.19703 0.15176 L-0.17583 0.17587 L-0.15173 0.19706 L-0.12500 0.21505 L-0.09594 0.22955 L-0.06485 0.24027 L-0.03201 0.24692 L0.00229 0.24920 L0.03658 0.24692 L0.06942 0.24027 L0.10052 0.22955 L0.12957 0.21505 L0.15630 0.19706 L0.18041 0.17587 L0.20161 0.15176 L0.21960 0.12504 L0.23411 0.09599 L0.24483 0.06490 L0.25147 0.03207 L0.25375 -0.00222 L0.19787 -0.00222 L0.19610 0.02452 L0.19095 0.05010 L0.18263 0.07430 L0.17138 0.09690 L0.15741 0.11768 L0.14094 0.13641 L0.12221 0.15287 L0.10142 0.16684 L0.07882 0.17809 L0.05461 0.18641 L0.02903 0.19156 L0.00229 0.19333 L-0.02445 0.19156 L-0.05004 0.18641 L-0.07424 0.17809 L-0.09685 0.16684 L-0.11763 0.15287 L-0.13637 0.13641 L-0.15283 0.11768 L-0.16681 0.09690 L-0.17806 0.07430 L-0.18638 0.05010 L-0.19153 0.02452 L-0.19330 -0.00222 L-0.19153 -0.02895 L-0.18638 -0.05453 L-0.17806 -0.07873 L-0.16681 -0.10133 L-0.15283 -0.12211 L-0.13637 -0.14084 L-0.11763 -0.15730 L-0.09685 -0.17127 L-0.07424 -0.18253 Z M0.33682 0.02065 L0.33682 -0.02508 L0.33094 -0.06957 L0.32588 -0.09109 L0.31173 -0.13246 L0.29245 -0.17127 L0.26837 -0.20714 L0.23978 -0.23966 L0.20905 -0.20893 L0.23390 -0.18082 L0.25510 -0.14975 L0.27226 -0.11605 L0.28500 -0.08002 L0.29293 -0.04197 L0.29497 -0.02229 L0.29497 0.01785 L0.29293 0.03754 L0.28500 0.07559 L0.27226 0.11162 L0.25510 0.14532 L0.23390 0.17638 L0.20905 0.20450 L0.23978 0.23523 L0.26837 0.20270 L0.29245 0.16684 L0.31173 0.12803 L0.32588 0.08666 L0.33094 0.06513 Z M0.04420 -0.08602 L0.10008 -0.08602 L-0.01168 -0.08602 Z M0.06889 -0.13614 L0.06218 -0.13892 L0.05515 -0.14081 L0.04789 -0.14177 L0.03592 -0.14189 L-0.01168 -0.08602 L0.10008 -0.08602 L0.09996 -0.08971 L0.09900 -0.09697 L0.09711 -0.10400 L0.09433 -0.11071 L0.09069 -0.11702 L0.08624 -0.12283 L0.08102 -0.12805 L0.07520 -0.13250 Z M0.08624 0.00666 L0.09069 0.00085 L0.09433 -0.00546 L0.09711 -0.01217 L0.09900 -0.01920 L0.09996 -0.02646 L0.10008 -0.08602 L0.04420 -0.08602 L0.04420 -0.03015 L-0.01168 -0.03015 L-0.01168 -0.08602 L0.03592 -0.14189 L-0.06756 -0.14189 L-0.06756 0.13746 L-0.01168 0.13746 L-0.01168 0.02572 L0.04789 0.02560 L0.05515 0.02463 L0.06218 0.02275 L0.06889 0.01997 L0.07520 0.01633 L0.08102 0.01188 Z M0.19787 -0.00222 L0.25375 -0.00222 L0.25147 -0.03650 L0.19610 -0.02895 Z"/></svg>
-    <svg style="position: absolute; left: 14.615%; width: 6.154%; top: 1.667%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M-0.20567 0.10670 L-0.14591 0.08691 L-0.14876 0.07519 L-0.15290 0.04753 L-0.15497 -0.01624 L-0.14876 -0.07519 L-0.14591 -0.08691 L-0.13338 -0.07939 L-0.12119 -0.06920 L-0.11549 -0.06308 L-0.11021 -0.05626 L-0.10544 -0.04872 L-0.10130 -0.04046 L-0.09789 -0.03147 L-0.09532 -0.02174 L-0.09370 -0.01125 L-0.09313 0.00000 L-0.09370 0.01125 L-0.09532 0.02174 L-0.09789 0.03148 L-0.10130 0.04047 L-0.10544 0.04872 L-0.11021 0.05626 L-0.11549 0.06308 L-0.12719 0.07464 L-0.13965 0.08348 L-0.05347 0.08300 L-0.04414 0.06484 L-0.03708 0.04491 L-0.03261 0.02327 L-0.03104 0.00000 L-0.03261 -0.02327 L-0.03708 -0.04490 L-0.04414 -0.06484 L-0.05347 -0.08300 L-0.06473 -0.09930 L-0.07761 -0.11368 L-0.09179 -0.12605 L-0.10693 -0.13634 L-0.12272 -0.14447 L-0.13884 -0.15038 L-0.15495 -0.15398 L-0.17075 -0.15519 L-0.18498 -0.14908 L-0.19662 -0.13220 L-0.20567 -0.10669 L-0.21214 -0.07472 L-0.21602 -0.03844 L-0.21602 0.03844 L-0.21214 0.07472 Z M-0.23180 -0.16485 L-0.22637 -0.17308 L-0.22042 -0.18002 L-0.29493 -0.22968 L-0.32908 -0.17692 L-0.24836 -0.12415 L-0.24112 -0.14554 Z M0.11021 0.05626 L0.10544 0.04872 L0.10130 0.04047 L0.09789 0.03148 L0.09532 0.02174 L0.09370 0.01125 L0.03261 0.02327 L0.03708 0.04491 L0.04414 0.06484 L0.05347 0.08300 L0.06473 0.09930 L0.07761 0.11368 L0.09179 0.12605 L0.10693 0.13634 L0.12273 0.14448 L0.13884 0.15038 L0.15496 0.15398 L0.17075 0.15519 L0.18498 0.14909 L0.19662 0.13220 L0.20568 0.10670 L0.21214 0.07472 L0.21602 0.03844 L0.21602 -0.03844 L0.21214 -0.07472 L0.20568 -0.10669 L0.19662 -0.13220 L0.18498 -0.14908 L0.17075 -0.15519 L0.15496 -0.15398 L0.13884 -0.15038 L0.12273 -0.14447 L0.10693 -0.13634 L0.09179 -0.12605 L0.07761 -0.11368 L0.06473 -0.09930 L0.05347 -0.08300 L0.04414 -0.06484 L0.03708 -0.04490 L0.03261 -0.02327 L0.03105 0.00000 L0.09314 0.00000 L0.09370 -0.01125 L0.09532 -0.02174 L0.09789 -0.03147 L0.10130 -0.04046 L0.10544 -0.04872 L0.11021 -0.05626 L0.11550 -0.06308 L0.12119 -0.06920 L0.13338 -0.07939 L0.14591 -0.08691 L0.14805 -0.07519 L0.15270 -0.01624 L0.15115 0.04753 L0.14591 0.08691 L0.13338 0.07939 L0.12119 0.06921 L0.11550 0.06308 Z M-0.23042 0.16554 L-0.24043 0.14692 L-0.24478 0.13605 L-0.24836 0.12416 L-0.32908 0.17692 L-0.29493 0.22969 L-0.22042 0.18002 Z M0.26388 -0.03104 L0.26388 0.03104 L0.37254 0.03104 L0.37254 -0.03104 Z M0.23042 -0.16554 L0.24043 -0.14691 L0.24478 -0.13605 L0.24836 -0.12415 L0.32908 -0.17692 L0.29493 -0.22968 L0.22042 -0.18002 Z M0.32908 0.17692 L0.24836 0.12416 L0.24112 0.14554 L0.23180 0.16485 L0.22637 0.17308 L0.22042 0.18002 L0.29493 0.22969 Z M-0.13884 0.15038 L-0.12272 0.14448 L-0.10693 0.13634 L-0.09179 0.12605 L-0.07761 0.11368 L-0.06473 0.09930 L-0.05347 0.08300 L-0.13965 0.08348 L-0.14591 0.08691 L-0.20567 0.10670 L-0.19662 0.13220 L-0.18498 0.14909 L-0.17075 0.15519 L-0.15495 0.15398 Z M-0.37254 -0.03104 L-0.37254 0.03104 L-0.26388 0.03104 L-0.26388 -0.03104 Z M0.03261 0.02327 L0.09370 0.01125 L0.09314 0.00000 L0.03105 0.00000 Z"/></svg>
-    <svg style="position: absolute; left: 1.538%; width: 6.154%; top: 1.667%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M0.14858 0.16676 L0.22195 0.16894 L0.23279 0.15416 L0.15781 0.15800 Z M0.02789 0.13761 L0.04149 0.13398 L0.05436 0.12923 L0.06651 0.12336 L0.08344 0.11247 L0.09388 0.10381 L0.10360 0.09409 L0.11227 0.08365 L0.12316 0.06672 L0.12903 0.05457 L0.13378 0.04170 L0.13741 0.02811 L-0.13752 0.02811 L-0.13389 0.04170 L-0.12914 0.05457 L-0.12327 0.06672 L-0.11238 0.08365 L-0.10371 0.09409 L-0.09399 0.10381 L-0.08355 0.11247 L-0.06662 0.12336 L-0.05447 0.12923 L-0.04160 0.13398 L-0.02800 0.13761 L-0.02800 0.22141 L-0.05256 0.21671 L-0.07596 0.20958 L-0.09820 0.20001 L-0.12937 0.18107 L-0.14869 0.16538 L-0.16668 0.14739 L-0.18229 0.12816 L-0.19536 0.10784 L-0.20591 0.08644 L-0.21703 0.05227 L-0.22134 0.02811 L0.22123 0.02811 L0.21692 0.05266 L0.21013 0.07606 L0.20084 0.09829 L0.18903 0.11936 L0.17469 0.13926 L0.15781 0.15800 L0.23279 0.15416 L0.25111 0.12320 L0.26490 0.09038 L0.27413 0.05569 L0.27877 0.01914 L0.27877 -0.01880 L0.27413 -0.05535 L0.26490 -0.09004 L0.25857 -0.10668 L0.24251 -0.13857 L0.22195 -0.16860 L0.14719 -0.16744 L0.16694 -0.14749 L0.18371 -0.12620 L0.19752 -0.10357 L0.20837 -0.07962 L0.21627 -0.05435 L0.22123 -0.02776 L0.13965 -0.02776 L0.05583 -0.11157 L-0.05594 -0.11157 L-0.13976 -0.02776 L-0.22134 -0.02776 L-0.21638 -0.05435 L-0.20848 -0.07962 L-0.19763 -0.10357 L-0.18382 -0.12620 L-0.16705 -0.14749 L-0.14730 -0.16744 L-0.12563 -0.18457 L-0.10279 -0.19856 L-0.07881 -0.20941 L-0.05369 -0.21714 L-0.02744 -0.22177 L-0.16886 -0.22179 L-0.18318 -0.20983 L-0.21010 -0.18292 L-0.23290 -0.15382 L-0.25122 -0.12286 L-0.26501 -0.09004 L-0.27424 -0.05535 L-0.27888 -0.01880 L-0.27888 0.01914 L-0.27424 0.05569 L-0.26501 0.09038 L-0.25122 0.12320 L-0.23290 0.15416 L-0.21010 0.18326 L-0.18318 0.21017 L-0.15408 0.23297 L-0.12311 0.25128 L-0.09028 0.26507 L-0.05559 0.27430 L-0.01903 0.27894 L0.01892 0.27894 L0.05548 0.27430 L0.09017 0.26507 L0.12300 0.25128 L0.15397 0.23297 L0.18307 0.21017 L0.20999 0.18326 L0.22195 0.16894 L0.14858 0.16676 L0.12926 0.18237 L0.09809 0.20102 L0.07585 0.21031 L0.05245 0.21710 L0.02789 0.22141 Z M-0.21970 0.02811 L0.22123 0.02811 L-0.22134 0.02811 Z M-0.21514 0.02811 L0.22123 0.02811 L-0.21970 0.02811 Z M-0.20825 0.02811 L0.22123 0.02811 L-0.21514 0.02811 Z M-0.19961 0.02811 L0.22123 0.02811 L-0.20825 0.02811 Z M-0.18981 0.02811 L0.22123 0.02811 L-0.19961 0.02811 Z M-0.17943 0.02811 L0.22123 0.02811 L-0.18981 0.02811 Z M-0.16905 0.02811 L0.22123 0.02811 L-0.17943 0.02811 Z M-0.15925 0.02811 L0.22123 0.02811 L-0.16905 0.02811 Z M-0.15062 0.02811 L0.22123 0.02811 L-0.15925 0.02811 Z M-0.14373 0.02811 L0.22123 0.02811 L-0.15062 0.02811 Z M-0.13917 0.02811 L0.22123 0.02811 L-0.14373 0.02811 Z M-0.13752 0.02811 L0.22123 0.02811 L-0.13917 0.02811 Z M0.13741 0.02811 L0.22123 0.02811 L-0.13752 0.02811 Z M0.09017 -0.26473 L0.05548 -0.27396 L0.01892 -0.27860 L-0.01903 -0.27860 L-0.05559 -0.27396 L-0.09028 -0.26473 L-0.10693 -0.25840 L-0.13883 -0.24234 L-0.16886 -0.22179 L-0.02744 -0.22177 L0.01378 -0.22292 L0.04059 -0.21984 L0.06628 -0.21366 L0.07870 -0.20941 L0.10268 -0.19856 L0.12552 -0.18457 L0.14719 -0.16744 L0.22195 -0.16860 L0.20999 -0.18292 L0.18307 -0.20983 L0.15397 -0.23263 L0.12300 -0.25094 Z"/></svg>
-    <svg style="position: absolute; left: 56.923%; width: 6.154%; top: 75.000%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M0.30944 0.13025 L0.32359 0.08887 L0.32865 0.06735 L0.33454 0.02286 L0.33454 -0.02286 L0.32865 -0.06735 L0.32359 -0.08887 L0.30944 -0.13024 L0.29017 -0.16906 L0.26608 -0.20492 L0.23750 -0.23744 L0.20676 -0.20672 L0.23161 -0.17860 L0.25281 -0.14754 L0.26998 -0.11383 L0.28272 -0.07780 L0.29065 -0.03975 L0.29269 -0.02007 L0.29269 0.02007 L0.29065 0.03976 L0.28272 0.07780 L0.26998 0.11383 L0.25281 0.14754 L0.23161 0.17860 L0.20676 0.20672 L0.23750 0.23745 L0.26608 0.20492 L0.29017 0.16906 Z M0.06818 0.02933 L0.00000 0.02095 L0.04634 0.06648 L0.05454 0.07255 L0.06332 0.07738 L0.07260 0.08091 L0.08226 0.08307 L0.09221 0.08380 L0.10244 0.08304 L0.11225 0.08080 L0.12156 0.07719 L0.13027 0.07232 L0.13829 0.06629 L0.14554 0.05919 L0.15192 0.05113 L0.15734 0.04221 L0.16171 0.03254 L0.16495 0.02221 L0.16696 0.01133 L0.16764 0.00000 L0.16696 -0.01145 L0.16495 -0.02241 L0.16171 -0.03277 L0.15734 -0.04246 L0.15192 -0.05137 L0.14554 -0.05940 L0.13829 -0.06645 L0.13027 -0.07244 L0.12156 -0.07727 L0.11225 -0.08084 L0.10244 -0.08305 L0.09221 -0.08380 L0.08226 -0.08309 L0.07263 -0.08100 L0.06343 -0.07759 L0.05479 -0.07292 L0.04683 -0.06706 L0.00000 -0.02095 L0.03856 0.00000 L0.07374 -0.03482 L0.07701 -0.03731 L0.08051 -0.03928 L0.08421 -0.04072 L0.08811 -0.04160 L0.09221 -0.04190 L0.09674 -0.04152 L0.10109 -0.04041 L0.10522 -0.03861 L0.10909 -0.03619 L0.11266 -0.03318 L0.11588 -0.02964 L0.11872 -0.02562 L0.12114 -0.02117 L0.12309 -0.01633 L0.12453 -0.01115 L0.12543 -0.00569 L0.12573 0.00000 L0.12542 0.00558 L0.12451 0.01096 L0.12305 0.01609 L0.12108 0.02092 L0.11864 0.02539 L0.11578 0.02944 L0.11254 0.03302 L0.10897 0.03607 L0.10511 0.03854 L0.10099 0.04037 L0.09668 0.04151 L0.09221 0.04190 L0.08968 0.04178 L0.08727 0.04145 L0.08281 0.04020 L0.07883 0.03834 L0.07534 0.03607 L0.07234 0.03356 Z M-0.23161 0.17860 L-0.25281 0.14754 L-0.26997 0.11383 L-0.28272 0.07780 L-0.29065 0.03976 L-0.29268 0.02007 L-0.29268 -0.02007 L-0.29065 -0.03975 L-0.28272 -0.07780 L-0.26997 -0.11383 L-0.25281 -0.14754 L-0.23161 -0.17860 L-0.20676 -0.20672 L-0.23749 -0.23744 L-0.26608 -0.20492 L-0.29017 -0.16906 L-0.30944 -0.13024 L-0.32359 -0.08887 L-0.32865 -0.06735 L-0.33454 -0.02286 L-0.33454 0.02286 L-0.32865 0.06735 L-0.32359 0.08887 L-0.30944 0.13025 L-0.29017 0.16906 L-0.26608 0.20492 L-0.23749 0.23745 L-0.20676 0.20672 Z M-0.06339 0.07759 L-0.05470 0.07292 L-0.04666 0.06706 L0.00000 0.02095 L0.06818 0.02933 L0.03856 0.00000 L0.00000 -0.02095 L-0.03856 0.00000 L-0.06985 0.03101 L-0.07069 0.03213 L-0.07374 0.03498 L-0.07701 0.03739 L-0.08050 0.03932 L-0.08420 0.04073 L-0.08811 0.04161 L-0.09220 0.04190 L-0.09668 0.04151 L-0.10099 0.04037 L-0.10510 0.03854 L-0.10897 0.03607 L-0.11254 0.03302 L-0.11578 0.02944 L-0.11864 0.02539 L-0.12107 0.02092 L-0.12305 0.01609 L-0.12451 0.01096 L-0.12542 0.00558 L-0.12573 0.00000 L-0.16764 0.00000 L-0.16695 0.01133 L-0.16495 0.02221 L-0.16171 0.03254 L-0.15734 0.04221 L-0.15191 0.05113 L-0.14553 0.05919 L-0.13829 0.06629 L-0.13026 0.07232 L-0.12155 0.07719 L-0.11225 0.08080 L-0.10243 0.08304 L-0.09220 0.08380 L-0.08226 0.08309 L-0.07261 0.08100 Z M-0.12305 -0.01609 L-0.12107 -0.02092 L-0.11864 -0.02539 L-0.11578 -0.02944 L-0.11254 -0.03301 L-0.10897 -0.03607 L-0.10510 -0.03854 L-0.10099 -0.04037 L-0.09668 -0.04151 L-0.09220 -0.04190 L-0.08968 -0.04178 L-0.08727 -0.04144 L-0.08281 -0.04020 L-0.07883 -0.03837 L-0.07533 -0.03615 L-0.07234 -0.03372 L-0.06985 -0.03129 L-0.06985 -0.03017 L-0.06817 -0.02933 L-0.03856 0.00000 L0.00000 -0.02095 L-0.04634 -0.06657 L-0.05453 -0.07267 L-0.06332 -0.07748 L-0.07259 -0.08097 L-0.08225 -0.08309 L-0.09220 -0.08380 L-0.10243 -0.08303 L-0.11225 -0.08080 L-0.12155 -0.07719 L-0.13026 -0.07232 L-0.13829 -0.06628 L-0.14553 -0.05919 L-0.15191 -0.05113 L-0.15734 -0.04221 L-0.16171 -0.03254 L-0.16495 -0.02221 L-0.16695 -0.01133 L-0.16764 0.00000 L-0.12573 0.00000 L-0.12542 -0.00558 L-0.12451 -0.01096 Z M0.02674 0.19378 L0.15401 0.19928 L0.17812 0.17808 L0.19932 0.15398 L0.21732 0.12726 L0.23182 0.09821 L0.24254 0.06712 L0.24919 0.03429 L0.25147 0.00000 L0.24919 -0.03429 L0.24254 -0.06712 L0.23182 -0.09821 L0.21732 -0.12726 L0.19932 -0.15398 L0.17812 -0.17808 L0.15401 -0.19928 L0.12729 -0.21727 L0.09823 -0.23177 L0.06714 -0.24249 L0.03430 -0.24913 L0.00000 -0.25141 L-0.03429 -0.24913 L-0.06713 -0.24249 L-0.09823 -0.23177 L-0.12728 -0.21727 L-0.15401 -0.19928 L-0.17812 -0.17808 L-0.19932 -0.15398 L-0.21731 -0.12726 L-0.23182 -0.09821 L-0.24254 -0.06712 L-0.24918 -0.03429 L-0.25146 0.00000 L-0.24918 0.03429 L-0.24254 0.06712 L-0.23182 0.09821 L-0.21731 0.12726 L-0.19932 0.15398 L-0.17812 0.17808 L-0.15401 0.19928 L0.00000 0.19554 L-0.02674 0.19378 L-0.05232 0.18862 L-0.07653 0.18031 L-0.09914 0.16906 L-0.11992 0.15509 L-0.13865 0.13863 L-0.15512 0.11990 L-0.16909 0.09912 L-0.18035 0.07652 L-0.18866 0.05231 L-0.19382 0.02673 L-0.19558 0.00000 L-0.19382 -0.02673 L-0.18866 -0.05231 L-0.18035 -0.07651 L-0.16909 -0.09912 L-0.15512 -0.11989 L-0.13865 -0.13862 L-0.11992 -0.15509 L-0.09914 -0.16906 L-0.07653 -0.18031 L-0.05232 -0.18862 L-0.02674 -0.19377 L0.00000 -0.19554 L0.02674 -0.19377 L0.05233 -0.18862 L0.07653 -0.18031 L0.09914 -0.16906 L0.11992 -0.15509 L0.13866 -0.13862 L0.15512 -0.11989 L0.16909 -0.09912 L0.18035 -0.07651 L0.18866 -0.05231 L0.19382 -0.02673 L0.19559 0.00000 L0.19382 0.02673 L0.18866 0.05231 L0.18035 0.07652 L0.16909 0.09912 L0.15512 0.11990 L0.13866 0.13863 L0.11992 0.15509 L0.09914 0.16906 L0.07653 0.18031 L0.05233 0.18862 Z M0.09823 0.23177 L0.12729 0.21727 L0.15401 0.19928 L0.02674 0.19378 L0.00000 0.19554 L-0.15401 0.19928 L-0.12728 0.21727 L-0.09823 0.23177 L-0.06713 0.24249 L-0.03429 0.24913 L0.00000 0.25141 L0.03430 0.24913 L0.06714 0.24249 Z"/></svg>
-    <svg style="position: absolute; left: 36.923%; width: 6.154%; top: 61.667%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M0.20883 0.21422 L0.23245 0.18738 L0.25253 0.15767 L0.26872 0.12542 L0.28071 0.09095 L0.28814 0.05461 L0.29069 0.01672 L0.28955 -0.00837 L0.28621 -0.03278 L0.27347 -0.07942 L0.25353 -0.12296 L0.21972 -0.06429 L0.22956 -0.03161 L0.23383 -0.00419 L0.23481 0.01672 L0.23278 0.04703 L0.22686 0.07607 L0.21731 0.10360 L0.20439 0.12935 L0.18834 0.15308 L0.16693 0.17740 L0.16489 0.18049 L0.16330 0.18377 L0.16217 0.18718 L0.16148 0.19069 L0.16126 0.19424 L0.16148 0.19780 L0.16217 0.20130 L0.16330 0.20472 L0.16489 0.20799 L0.16693 0.21108 L0.16943 0.21394 L0.17229 0.21643 L0.17538 0.21848 L0.17865 0.22007 L0.18207 0.22121 L0.18557 0.22190 L0.18913 0.22214 L0.19268 0.22194 L0.19619 0.22128 L0.19961 0.22018 L0.20288 0.21864 L0.20597 0.21665 Z M0.00575 0.10034 L0.01936 0.10014 L0.02721 0.09901 L0.03481 0.09717 L0.04212 0.09466 L0.04911 0.09150 L0.05575 0.08774 L0.06199 0.08341 L0.06781 0.07855 L0.07317 0.07318 L0.07804 0.06735 L0.24068 -0.21318 L-0.03667 -0.05236 L-0.04766 -0.04319 L-0.05697 -0.03221 L-0.06432 -0.01969 L-0.06720 -0.01292 L-0.06948 -0.00587 L-0.07116 0.00144 L-0.07219 0.00898 L-0.07235 0.02225 L-0.07091 0.03314 L-0.06808 0.04369 L-0.06391 0.05375 L-0.05845 0.06321 L-0.05177 0.07193 L-0.04394 0.07976 L-0.03522 0.08644 L-0.02576 0.09189 L-0.01569 0.09606 L-0.00514 0.09890 Z M-0.18181 0.12947 L-0.19474 0.10370 L-0.20429 0.07614 L-0.21021 0.04705 L-0.21173 0.03202 L-0.21175 0.00196 L-0.20790 -0.02708 L-0.20035 -0.05520 L-0.18923 -0.08204 L-0.17468 -0.10727 L-0.15686 -0.13052 L-0.13599 -0.15140 L-0.11272 -0.16921 L-0.08750 -0.18375 L-0.06065 -0.19487 L-0.03252 -0.20243 L-0.00348 -0.20627 L0.02524 -0.20632 L0.05274 -0.20292 L0.07904 -0.19635 L0.09148 -0.19195 L0.15015 -0.22575 L0.10713 -0.24550 L0.06064 -0.25816 L0.03628 -0.26149 L-0.00717 -0.26202 L-0.04348 -0.25721 L-0.07863 -0.24777 L-0.11219 -0.23387 L-0.14373 -0.21569 L-0.17280 -0.19342 L-0.19890 -0.16733 L-0.22118 -0.13826 L-0.23935 -0.10673 L-0.25326 -0.07318 L-0.26270 -0.03803 L-0.26751 -0.00173 L-0.26747 0.03583 L-0.26557 0.05461 L-0.25813 0.09095 L-0.24615 0.12542 L-0.22995 0.15767 L-0.20988 0.18738 L-0.18625 0.21422 L-0.18339 0.21665 L-0.18029 0.21864 L-0.17699 0.22018 L-0.17355 0.22128 L-0.17000 0.22194 L-0.16642 0.22214 L-0.16283 0.22190 L-0.15929 0.22121 L-0.15584 0.22007 L-0.15254 0.21848 L-0.14944 0.21643 L-0.14658 0.21394 L-0.14408 0.21108 L-0.14204 0.20799 L-0.14045 0.20472 L-0.13931 0.20130 L-0.13863 0.19780 L-0.13840 0.19424 L-0.13863 0.19069 L-0.13931 0.18718 L-0.14045 0.18377 L-0.14204 0.18049 L-0.14408 0.17740 L-0.14658 0.17455 L-0.14686 0.17455 L-0.16577 0.15318 Z"/></svg>
-    <svg style="position: absolute; left: 7.692%; width: 6.154%; top: 1.667%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M-0.02700 -0.14400 L0.02700 -0.14400 L0.02700 0.03600 L-0.02700 0.03600 Z M0.02700 0.14400 L-0.02700 0.14400 L-0.02700 0.09000 L0.02700 0.09000 Z M0.02700 0.24300 L0.02467 0.18739 L0.00000 0.18901 L-0.02467 0.18739 L-0.04892 0.18257 L-0.07233 0.17462 L-0.09450 0.16369 L-0.11506 0.14995 L-0.13364 0.13365 L-0.14995 0.11506 L-0.16368 0.09451 L-0.17462 0.07233 L-0.18256 0.04892 L-0.18739 0.02467 L-0.18900 0.00000 L-0.18739 -0.02467 L-0.18256 -0.04891 L-0.17462 -0.07232 L-0.16368 -0.09450 L-0.14995 -0.11505 L-0.13365 -0.13364 L-0.11506 -0.14994 L-0.09450 -0.16368 L-0.07233 -0.17461 L-0.04892 -0.18256 L-0.02467 -0.18738 L-0.02700 -0.24300 L-0.06339 -0.23614 L-0.09812 -0.22394 L-0.13412 -0.28630 L-0.18088 -0.25930 L-0.14488 -0.19694 L-0.15946 -0.18534 L-0.18548 -0.15930 L-0.19695 -0.14488 L-0.25930 -0.18088 L-0.28630 -0.13412 L-0.22395 -0.09812 L-0.23077 -0.08078 L-0.24028 -0.04522 L-0.24300 -0.02700 L-0.31500 -0.02700 L-0.31500 0.02700 L-0.24300 0.02700 L-0.24024 0.04543 L-0.23070 0.08098 L-0.22395 0.09812 L-0.28630 0.13412 L-0.25930 0.18088 L-0.19695 0.14488 L-0.17281 0.17296 L-0.14488 0.19694 L-0.18088 0.25930 L-0.13412 0.28630 L-0.09812 0.22394 L-0.08078 0.23077 L-0.04522 0.24028 L-0.02700 0.24300 L-0.02700 0.31500 L0.02700 0.31500 Z M-0.02467 -0.18738 L-0.00000 -0.18900 L0.02467 -0.18738 L0.04892 -0.18256 L0.07233 -0.17461 L0.09450 -0.16368 L0.11506 -0.14994 L0.13364 -0.13364 L0.14995 -0.11506 L0.16368 -0.09450 L0.17462 -0.07233 L0.18256 -0.04892 L0.18739 -0.02467 L0.18900 0.00000 L0.18739 0.02467 L0.18256 0.04892 L0.17462 0.07233 L0.16368 0.09450 L0.14995 0.11506 L0.13365 0.13365 L0.11506 0.14995 L0.09450 0.16368 L0.07233 0.17462 L0.04892 0.18257 L0.02467 0.18739 L0.02700 0.24300 L0.04543 0.24024 L0.08098 0.23070 L0.09812 0.22394 L0.13412 0.28630 L0.18088 0.25930 L0.14488 0.19694 L0.15946 0.18534 L0.18548 0.15930 L0.19694 0.14488 L0.25930 0.18088 L0.28630 0.13412 L0.22394 0.09812 L0.23077 0.08078 L0.24028 0.04522 L0.24300 0.02700 L0.31500 0.02700 L0.31500 -0.02700 L0.24300 -0.02700 L0.23614 -0.06338 L0.22394 -0.09812 L0.28630 -0.13412 L0.25930 -0.18088 L0.19694 -0.14488 L0.18534 -0.15946 L0.15930 -0.18548 L0.14488 -0.19694 L0.18088 -0.25930 L0.13412 -0.28630 L0.09812 -0.22394 L0.08077 -0.23077 L0.04521 -0.24028 L0.02700 -0.24300 L0.02700 -0.31500 L-0.02700 -0.31500 L-0.02700 -0.24300 Z"/></svg>
-    <svg style="position: absolute; left: 27.692%; width: 6.154%; top: 1.667%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M0.27269 -0.10184 L-0.00050 -0.10184 L-0.00050 -0.26709 L-0.26824 0.00059 L-0.00050 0.26827 L-0.00050 0.10302 L0.27269 0.10302 Z"/></svg>
-    <svg style="position: absolute; left: 66.154%; width: 6.154%; top: 1.667%; height: 13.333%" viewbox="-0.4 -0.4 0.8 0.8"><path d="M0.00050 0.10302 L0.00050 0.26827 L0.26824 0.00059 L0.00050 -0.26709 L0.00050 -0.10184 L-0.27269 -0.10184 L-0.27269 0.10302 Z"/></svg>
-  </div>-->
-
-<!--
-    <filter id='noiseFilter'>
-        <feTurbulence type='fractalNoise' baseFrequency='70' numOctaves='1' />
-        <feColorMatrix values="0 0 0 0.21 0.05
-                               0 0 0 0.21 0.05
-                               0 0 0 0.21 0.05
-                               0 0 0 0 1" color-interpolation-filters="sRGB"/>
-    </filter>
--->
 </template>
 
 <style>
+body {
+  margin: 0;
+  background-color: #000;
+}
+</style>
+
+<style scoped>
+
+.container {
+  font-family: Roboto, "Helvetica Neue", sans-serif;
+  margin: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.dashboard_background {
+}
 
 .dashboard_top {
-  position: relative;
+  position: absolute;
   container-type: inline-size;
   container-name: dash;
-  width: 100%;
-  background-color: #F0F;
+  max-width: 100vw;
+  max-height: 100vh;
+  height: 100vh;
+  text-anchor: middle;
+  dominant-baseline: central;
 }
 
 .dashboard_full {
@@ -208,26 +444,22 @@ onUnmounted(() => {
 .dashboard_needle {
   fill: #F64;
   stroke: #832;
-  stroke-width: 0.01;
-  filter: drop-shadow(0px 0px 0.1px #F648);
+  stroke-width: 1;
+  filter: drop-shadow(0px 0px 10px #F648);
 }
 
 .dashboard_occlusion {
-  filter: drop-shadow(0px 0px 0.3px #0008) drop-shadow(0px 0px 0.1px #000);
+  filter: drop-shadow(1px 2px 30px #0004) drop-shadow(1px 2px 5px #0008);
 }
 
 .dashboard_primary {
   fill: #AF8;
-  text-anchor: middle;
-  dominant-baseline: central;
-  filter: drop-shadow(0px 0px 0.05px #AF86);
+  filter: drop-shadow(0px 0px 5px #AF86);
 }
 
 .dashboard_secondary {
   fill: #FA8;
-  text-anchor: middle;
-  dominant-baseline: central;
-  filter: drop-shadow(0px 0px 0.05px #FA86);
+  filter: drop-shadow(0px 0px 5px #FA86);
 }
 
 .dashboard_segment {
@@ -237,71 +469,13 @@ onUnmounted(() => {
 .dashboard_desg7 {
   font-family: "DSEG7 Classic Mini", monospace;
   font-style: italic;
-  text-anchor: middle;
+  dominant-baseline: initial;
 }
 
 .dashboard_desg14 {
   font-family: "DSEG14 Classic Mini", monospace;
   font-style: italic;
-  text-anchor: middle;
-}
-
-.dashboard {
-  position: relative;
-  container-type: inline-size;
-  container-name: dash;
-  width: 100%;
-  aspect-ratio: 13 / 6;
-  background-color: #300;
-}
-
-.noobs {
-  position: absolute;
-  left: 10%;
-  width: 10%;
-  top: 10%;
-  height: 10%;
-  background-color: #030;
-}
-
-.positioned {
-  position: absolute;
-  transform: translate(-50%, -50%);
-}
-
-body {
-  color: #E0E0E0;
-  background-color: #0C0C0C;
-  font-family: Roboto, "Helvetica Neue", sans-serif;
-}
-
-span.seg7 {
-  font-family: "DSEG7 Classic Mini", monospace;
-}
-
-span.seg14 {
-  font-family: "DSEG14 Classic Mini", monospace;
-}
-
-span.seg7, span.seg14 {
-  font-style: italic;
-  font-size: 4cqi;
-  position: relative;
-}
-
-span.seg7 span:nth-of-type(1), span.seg14 span:nth-of-type(1) {
-  z-index: 100;
-  position: absolute;
-  top: 0;
-  white-space: nowrap;
-}
-
-span.seg7 span:nth-of-type(2), span.seg14 span:nth-of-type(2) {
-  z-index: 50;
-  position: absolute;
-  top: 0;
-  white-space: nowrap;
-  color: #101010;
+  dominant-baseline: initial;
 }
 
 .indicator-off {
@@ -327,30 +501,5 @@ span.seg7 span:nth-of-type(2), span.seg14 span:nth-of-type(2) {
 .indicator-gray {
   color: #CCCCCC;
 }
-
-.gauge {
-  aspect-ratio: 1;
-  container-type: inline-size;
-  display: grid;
-  grid-template: repeat(3, 1fr) / repeat(3, 1fr);
-  inline-size: 100%;
-}
-
-.gauge-gauge {
-  background: conic-gradient(from 235deg, #8CF, #6BF, #46E, #24C 220deg, #0000 220deg);
-  border-radius: 50%;
-  grid-area: 1 / 1 / 4 / 4;
-  mask: radial-gradient(circle at 50% 50%, #0000 0%, #fff 100%);
-  mask-composite: subtract;
-}
-
-.off {
-  color: #FFF !important;
-}
-
-.red {
-  color: #F00;
-}
-
 
 </style>
