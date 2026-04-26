@@ -114,6 +114,7 @@ export class TruckTelSocket {
     constructor(structure: string, query: string = "") {
         this.structure = structure;
         this.query = query;
+        this.debug_id = Date.now();
     }
 
     /**
@@ -121,14 +122,15 @@ export class TruckTelSocket {
      * handles automatic reconnection internally.
      */
     open(): void {
-        // Don't reopen if a socket has been opened before and close() has not
-        // been called since.
-        if (this.socket !== undefined) {
-            if (this.debug) {
-                console.warn("Trying to reopen TruckTel socket; this is no-op");
-            }
-            return;
+        // Increment reference count.
+        this.ref_count++;
+        if (this.debug) {
+            console.info(`TruckTelSocket.open() for ${this.debug_id}, ref_count is now ${this.ref_count}`);
         }
+        if (this.ref_count > 1) return;
+
+        // Don't recreate if the socket already exists.
+        if (this.socket !== undefined) return;
 
         // There's no reason why the development server should open the
         // websocket, since we're targeting a static server anyway.
@@ -178,6 +180,11 @@ export class TruckTelSocket {
      * Closes the websocket.
      */
     close(): void {
+        this.ref_count--;
+        if (this.debug) {
+            console.info(`TruckTelSocket.close() for ${this.debug_id}, ref_count is now ${this.ref_count}`);
+        }
+        if (this.ref_count > 0) return;
         if (this.socket === undefined) return;
         if (this.debug) {
             console.info("Closing websocket...");
@@ -228,9 +235,19 @@ export class TruckTelSocket {
     private readonly query: string;
 
     /**
+     * Used to uniquely identify the socket in debug messages.
+     */
+    private readonly debug_id: number;
+
+    /**
      * Reference to the websocket.
      */
     private socket?: WebSocket = undefined;
+
+    /**
+     * Reference counter for open/close.
+     */
+    private ref_count: number = 0;
 
     /**
      * Whether we're connected to the game.
@@ -307,59 +324,4 @@ export class TruckTelSocket {
         }
     }
 
-}
-
-/**
- * Converts an SCS game engine timestamp in minutes to the in-game "Day HH:MM"
- * format.
- */
-export function formatAbsScsTime(timestamp?: number, am_pm: boolean = false): string {
-    if (timestamp === undefined || timestamp === null) {
-        if (am_pm) {
-            return "--- -:-- --";
-        } else {
-            return "--- --:--";
-        }
-    }
-
-    timestamp = Math.floor(timestamp);
-    let min = timestamp % 60;
-    timestamp = Math.floor(timestamp / 60);
-    let hrs = timestamp % 24;
-    timestamp = Math.floor(timestamp / 24);
-    let day = timestamp % 7;
-
-    const min_fmt = min.toString().padStart(2, "0");
-    const day_fmt = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][day];
-
-    let hrs_fmt: string;
-    let suf_fmt: string;
-    if (am_pm) {
-        const pm = hrs >= 12;
-        hrs %= 12;
-        if (hrs == 0) hrs = 12;
-        hrs_fmt = hrs.toString();
-        suf_fmt = pm ? " pm" : " am";
-    } else {
-        hrs_fmt = hrs.toString().padStart(2, "0");
-        suf_fmt = "";
-    }
-
-    return `${day_fmt} ${hrs_fmt}:${min_fmt}${suf_fmt}`;
-}
-
-/**
- * Converts an SCS game engine time delta in minutes or seconds to the in-game
- * "HHH h MM min" format.
- */
-export function formatRelScsTime(delta?: number, seconds: boolean = false): string {
-    if (delta === undefined || delta === null) {
-        return "- h - min";
-    }
-    if (seconds) delta /= 60;
-    const sign = delta < 0 ? "- " : "";
-    delta = Math.floor(Math.abs(delta));
-    const min = delta % 60;
-    const hrs = Math.floor(delta / 60);
-    return `${sign}${hrs} h ${min} min`;
 }
