@@ -7,13 +7,77 @@ import {onUnmounted, reactive} from "vue";
 export const game = {
     current: reactive({
         paused: null,
-        job_expected: null,
     }),
     unpaused: reactive({
-        time: null,
-        rest_remain: null,
-        nav_remain_time: null,
-        nav_remain_dist: null,
+        time: {
+            current: null,
+            restRemain: null,
+            navRemain: null,
+            jobExpected: null,
+        },
+        electric: {
+            enabled: null,
+            indicator: null,
+        },
+        engine: {
+            running: null,
+            rpm: null,
+            rpmLimit: null,
+            wear: null,
+        },
+        transmission: {
+            realGear: null,
+            indicatedGear: null,
+            diffLock: null,
+            wear: null,
+        },
+        axles: {
+            liftTruck: null,
+            liftTrailer: null,
+            speed: null,
+            odo: null,
+        },
+        brake: {
+            parking: null,
+            motor: null,
+            retarder: null,
+        },
+        fuel: {
+            amount: null,
+            capacity: null,
+            consumption: null,
+            indicator: null,
+        },
+        adBlue: {
+            amount: null,
+            capacity: null,
+            indicator: null,
+        },
+        oil: {
+            pressure: null,
+            indicator: null,
+        },
+        coolant: {
+            temperature: null,
+            indicator: null,
+        },
+        air: {
+            pressure: null,
+            indicator: null,
+        },
+        lights: {
+            parking: null,
+            low: null,
+            high: null,
+            beacon: null,
+            turnLeft: null,
+            turnRight: null,
+            dash: null,
+        },
+        util: {
+            cruiseControl: null,
+            speedLimit: null,
+        },
     }),
 };
 
@@ -24,7 +88,7 @@ export const socket = new TruckTelSocket("dash");
 socket.current = game.current;
 socket.unpaused = game.unpaused;
 socket.paused_key = "paused";
-socket.throttle = 1000;
+socket.throttle = 0;
 socket.debug = true;
 
 /**

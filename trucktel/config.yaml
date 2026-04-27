@@ -29,20 +29,136 @@ custom-structures:
   dash:
     paused:
       key: frame.paused
+
     time:
-      key: game.time
-    job_expected:
-      key: job.delivery.time
-    rest_remain:
-      key: rest.stop
-    nav_remain_time:
-      key: truck.navigation.time
-      scale: 0.016666666666666666
-      operator: round
-    nav_remain_dist:
-      key: truck.navigation.distance
-      scale: 0.001
-      operator: round
+      current:
+        key: game.time
+      restRemain:
+        key: rest.stop
+      navRemain:
+        key: truck.navigation.time
+        scale: 0.016666666666666666
+        operator: round
+      jobExpected:
+        key: job.delivery.time
+
+    electric:
+      enabled:
+        key: truck.electric.enabled
+      indicator:
+        key: truck.battery.voltage.warning
+
+    engine:
+      running:
+        key: truck.engine.enabled
+      rpm:
+        key: truck.engine.rpm
+        scale: 0.1
+        operator: round
+      rpmLimit:
+        key: truck.rpm.limit
+      wear:
+        scale: 100
+        operator: round
+        key: truck.wear.engine
+
+    transmission:
+      realGear:
+        key: truck.engine.gear
+      indicatedGear:
+        key: truck.displayed.gear
+      diffLock:
+        key: truck.differential_lock
+      wear:
+        scale: 100
+        operator: round
+        key: truck.wear.transmission
+
+    axles:
+      liftTruck:
+        key: truck.lift_axle.indicator
+      liftTrailer:
+        key: truck.trailer.lift_axle.indicator
+      speed:
+        key: truck.speed
+        scale: 10
+        operator: round
+      odo:
+        key: truck.odometer
+
+    brake:
+      parking:
+        key: truck.brake.parking
+      motor:
+        key: truck.brake.motor
+      retarder:
+        key: truck.brake.retarder
+
+    fuel:
+      amount:
+        key: truck.fuel.amount
+        operator: round
+      capacity:
+        key: truck.fuel.capacity
+      consumption:
+        key: truck.fuel.consumption.average
+        scale: 1000
+        operator: round
+      indicator:
+        key: truck.fuel.warning
+
+    adBlue:
+      amount:
+        key: truck.adblue
+        operator: round
+      capacity:
+        key: truck.adblue.capacity
+      indicator:
+        key: truck.adblue.warning
+
+    oil:
+      pressure:
+        key: truck.oil.pressure
+        operator: round
+      indicator:
+        key: truck.oil.pressure.warning
+
+    coolant:
+      temperature:
+        key: truck.water.temperature
+        scale: 2
+        operator: round
+      indicator:
+        key: truck.water.temperature.warning
+
+    air:
+      pressure:
+        key: truck.brake.air.pressure
+        operator: round
+      indicator:
+        key: truck.brake.air.pressure.warning
+
+    lights:
+      parking:
+        key: truck.light.parking
+      low:
+        key: truck.light.beam.low
+      high:
+        key: truck.light.beam.high
+      beacon:
+        key: truck.light.beacon
+      turnLeft:
+        key: truck.light.lblinker
+      turnRight:
+        key: truck.light.rblinker
+      dash:
+        key: truck.dashboard.backlight
+
+    util:
+      cruiseControl:
+        key: truck.cruise_control
+      speedLimit:
+        key: truck.navigation.speed.limit
 
 input:
   binary:

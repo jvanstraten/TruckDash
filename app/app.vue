@@ -5,6 +5,7 @@ import { useFullscreen } from '@vueuse/core'
 import { design } from "~/design";
 import { state } from "~/state";
 import { shading } from "~/shading";
+import { instruments } from "~/instruments";
 import { useGame } from "~/game";
 
 const flash = ref(false);
@@ -15,8 +16,8 @@ function timeout() {
   timer = window.setTimeout(timeout, 350);
   flash.value = !flash.value;
   t.value += 1;
-  state.ambient_level.value = Math.sin(t.value * 0.05) * 0.5 + 0.5;
-  state.backlight_level.value = Math.sin(t.value * 0.16) > 0 ? 1.0 : 0.0;
+  //state.ambientLevel.value = Math.sin(t.value * 0.05) * 0.5 + 0.5;
+  //instruments.backlight.value = Math.sin(t.value * 0.16) > 0 ? 0.3 : 0.0;
 }
 onMounted(() => {
   timeout();
@@ -104,12 +105,12 @@ const { isFullscreen, enter, exit, toggle } = useFullscreen()
               :x="display.co.x" :y="display.co.y"
               :style="{'font-size': (0.7 * display.sz) + 'pt'}"
               :class="['dashboard_' + display.fnt.toLowerCase()]"
-          >{{ display.seg }}</text>
+          >{{ (instruments.displays as any)[display.id].value }}</text>
         </g>
         <g :style="shading.needle.needle">
           <path
               v-for="needle in design.layer0.ndl"
-              :transform="'translate(' + needle.co.x + ' ' + needle.co.y + ') rotate(' + needle.clp[0] + ')'"
+              :transform="'translate(' + needle.co.x + ' ' + needle.co.y + ') rotate(' + (instruments.needles as any)[needle.id].value + ')'"
               :d="needle.pth"
           />
         </g>
@@ -142,13 +143,13 @@ const { isFullscreen, enter, exit, toggle } = useFullscreen()
             v-for="indicator in design.layer1.ind"
             :transform="'translate(' + indicator.co.x + ' ' + indicator.co.y + ')'"
             :d="indicator.pth"
-            :style="(shading.indicator as any /* shut up */)[indicator.col][flash ? 'on' : 'off']"
+            :style="(shading.indicator as any /* shut up */)[indicator.col][(instruments.indicators as any /* you too */ )[indicator.id].value ? 'on' : 'off']"
         />
 
         <g :style="shading.needle.needle">
           <g
               v-for="needle in design.layer1.ndl"
-              :transform="'translate(' + needle.co.x + ' ' + needle.co.y + ') rotate(' + needle.clp[0] + ')'"
+              :transform="'translate(' + needle.co.x + ' ' + needle.co.y + ') rotate(' + (instruments.needles as any)[needle.id].value + ')'"
           >
             <path :d="needle.pth"/>
             <circle r="20" fill="url('#needleCenter')" stroke="none"/>

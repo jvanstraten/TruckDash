@@ -1,6 +1,7 @@
 import { Color } from "color-core";
 import { state } from "~/state";
 import { config } from "~/config";
+import { instruments } from "~/instruments"
 
 function multiplyColors(a: Color, b: Color): Color {
     return new Color({
@@ -12,8 +13,10 @@ function multiplyColors(a: Color, b: Color): Color {
 }
 
 function computeColors() {
-    const amb_lvl = state.ambient_level.value;
-    const bl_lvl = state.backlight_level.value;
+    const amb_lvl = state.ambientLevel.value;
+    const bl_lvl = instruments.backlight.value;
+    const disp_lvl = instruments.displays.brightness.value;
+    const ind_lvl = instruments.indicators.brightness.value;
     const th = config.theme.value;
 
     // Ambient light color. White at max brightness, orange-y when dimmed.
@@ -65,7 +68,7 @@ function computeColors() {
             },
             needle: {
                 fill: combined.toHex(),
-                stroke: config.theme.value.needle_stroke,
+                stroke: config.theme.value.needleStroke,
                 filter: `drop-shadow(0px 0px 20px #0008) drop-shadow(0px 0px 10px ${glow.toHex()})`,
             },
             indicator: {
@@ -88,19 +91,19 @@ function computeColors() {
     const c_dis = new Color(th.display);
     const c_seg = new Color(th.segments);
     const c_ndl = new Color(th.needle);
-    const c_red = new Color(th.indicator_red);
-    const c_amb = new Color(th.indicator_amber);
-    const c_grn = new Color(th.indicator_green);
-    const c_blu = new Color(th.indicator_blue);
+    const c_red = new Color(th.indicatorRed);
+    const c_amb = new Color(th.indicatorAmber);
+    const c_grn = new Color(th.indicatorGreen);
+    const c_blu = new Color(th.indicatorBlue);
 
     const primary = shade(c_prim, multiplyColors(c_prim, c_bl), bl_lvl, 0.9);
     const secondary = shade(c_sec, multiplyColors(c_sec, c_bl), bl_lvl, 0.9);
     const needle = shade(c_ndl, c_ndl, bl_lvl, 0.9);
-    const display = shade(c_seg, c_dis, bl_lvl, 0.7);
-    const indicator_red = shade(c_seg, c_red, 1.0, 0.5);
-    const indicator_amber = shade(c_seg, c_amb, 1.0, 0.5);
-    const indicator_green = shade(c_seg, c_grn, 1.0, 0.5);
-    const indicator_blue = shade(c_seg, c_blu, 1.0, 0.5);
+    const display = shade(c_seg, c_dis, disp_lvl, 0.4);
+    const indicator_red = shade(c_seg, c_red, ind_lvl, 0.4);
+    const indicator_amber = shade(c_seg, c_amb, ind_lvl, 0.4);
+    const indicator_green = shade(c_seg, c_grn, ind_lvl, 0.4);
+    const indicator_blue = shade(c_seg, c_blu, ind_lvl, 0.4);
 
     return {
         background: background.toHex(),
