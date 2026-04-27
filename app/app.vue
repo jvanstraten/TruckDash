@@ -1,164 +1,36 @@
 <script setup lang="ts">
 
-import { onUnmounted } from "vue";
 import { useFullscreen } from '@vueuse/core'
-import { design } from "~/design";
-import { state } from "~/state";
-import { shading } from "~/shading";
-import { instruments } from "~/instruments";
-import { useGame } from "~/game";
+import dashboard from "~/components/dashboard.vue";
 
-const flash = ref(false);
-const t = ref(0.0);
+const fullscreen = useFullscreen()
+let wakeLock: WakeLockSentinel | null = null;
 
-let timer: number;
-function timeout() {
-  timer = window.setTimeout(timeout, 350);
-  flash.value = !flash.value;
-  t.value += 1;
-  //state.ambientLevel.value = Math.sin(t.value * 0.05) * 0.5 + 0.5;
-  //instruments.backlight.value = Math.sin(t.value * 0.16) > 0 ? 0.3 : 0.0;
+async function toggleFullscreen() {
+  if (fullscreen.isFullscreen.value) {
+    await fullscreen.exit();
+    if (wakeLock !== null) {
+      await wakeLock.release();
+      wakeLock = null;
+    }
+  } else {
+    await fullscreen.enter();
+
+    // Not that this is gonna work, because clearly it's NoT sAfE to keep a
+    // screen on UNLESS the javascript requesting it was encrypted with a key
+    // that has the seal of approval from a hostile foreign government's
+    // certificate authority. See also:
+    // https://www.youtube.com/watch?v=M1si1y5lvkk
+    if (navigator && "wakeLock" in navigator) {
+      wakeLock = await navigator.wakeLock.request("screen");
+    }
+  }
 }
-onMounted(() => {
-  timeout();
-});
-onUnmounted(() => {
-  window.clearTimeout(timer);
-});
-
-useGame();
-
-const { isFullscreen, enter, exit, toggle } = useFullscreen()
 
 </script>
 
 <template>
-
-  <div class="container" @click="toggle" :style="{'background-color': shading.background}">
-    <div class="dashboard_top" :style="{'aspect-ratio': design.dim.view.w + ' / ' + design.dim.view.h}">
-      {{""/* Note: vue is being an idiot and is refusing to bind viewBox reliably, regardless of camelcase property workaround */}}
-      <svg class="dashboard_full" viewBox="0 0 1300 600">
-        <!-- Details for the needles. -->
-        <defs>
-          <radialGradient id="needleCenter">
-            <stop offset="10%" stop-color="#0008" />
-            <stop offset="40%" stop-color="#0007" />
-            <stop offset="50%" stop-color="#0004" />
-            <stop offset="70%" stop-color="#0001" />
-            <stop offset="100%" stop-color="#0000" />
-          </radialGradient>
-        </defs>
-
-        <!-- LAYER 0 DIFFUSE -->
-        <path
-            :d="design.layer0.pth"
-            :style="{'fill': shading.background}"
-        />
-        <g :style="shading.primary.diffuse">
-          <path :d="design.layer0.prim.pth"/>
-          <text
-              v-for="label in design.layer0.prim.lbl"
-              :x="label.co.x" :y="label.co.y"
-              :style="{'font-size': (0.7 * label.sz) + 'pt'}"
-          >{{ label.txt }}</text>
-        </g>
-        <g :style="shading.secondary.diffuse">
-          <path :d="design.layer0.sec.pth"/>
-          <text
-              v-for="label in design.layer0.sec.lbl"
-              :x="label.co.x" :y="label.co.y"
-              :style="{'font-size': (0.7 * label.sz) + 'pt'}"
-          >{{ label.txt }}</text>
-        </g>
-        <g :style="shading.display.diffuse">
-          <text
-              v-for="display in design.layer0.disp"
-              :x="display.co.x" :y="display.co.y"
-              :style="{'font-size': (0.7 * display.sz) + 'pt'}"
-              :class="['dashboard_' + display.fnt.toLowerCase()]"
-          >{{ display.seg }}</text>
-        </g>
-
-        <!-- LAYER 0 AMBIENT SHADING -->
-        <path :d="design.layer1.pth" class="dashboard_occlusion"/>
-
-        <!-- LAYER 0 EMISSION -->
-        <g :style="shading.primary.emission">
-          <path :d="design.layer0.prim.pth"/>
-          <text
-              v-for="label in design.layer0.prim.lbl"
-              :x="label.co.x" :y="label.co.y"
-              :style="{'font-size': (0.7 * label.sz) + 'pt'}"
-          >{{ label.txt }}</text>
-        </g>
-        <g :style="shading.secondary.emission">
-          <path :d="design.layer0.sec.pth"/>
-          <text
-              v-for="label in design.layer0.sec.lbl"
-              :x="label.co.x" :y="label.co.y"
-              :style="{'font-size': (0.7 * label.sz) + 'pt'}"
-          >{{ label.txt }}</text>
-        </g>
-        <g :style="shading.display.emission">
-          <text
-              v-for="display in design.layer0.disp"
-              :x="display.co.x" :y="display.co.y"
-              :style="{'font-size': (0.7 * display.sz) + 'pt'}"
-              :class="['dashboard_' + display.fnt.toLowerCase()]"
-          >{{ (instruments.displays as any)[display.id].value }}</text>
-        </g>
-        <g :style="shading.needle.needle">
-          <path
-              v-for="needle in design.layer0.ndl"
-              :transform="'translate(' + needle.co.x + ' ' + needle.co.y + ') rotate(' + (instruments.needles as any)[needle.id].value + ')'"
-              :d="needle.pth"
-          />
-        </g>
-
-        <!-- LAYER 1 -->
-        <!-- Combined diffuse and emission for better rendering performance. -->
-        <!-- Needle shadows cover emission as a result, but it's hardly noticeable IMO. -->
-        <path
-            :d="design.layer1.pth"
-            :style="{'fill': shading.background}"
-        />
-        <g :style="shading.primary.combined">
-          <path :d="design.layer1.prim.pth"/>
-          <text
-              v-for="label in design.layer1.prim.lbl"
-              :x="label.co.x" :y="label.co.y"
-              :style="{'font-size': (0.7 * label.sz) + 'pt'}"
-          >{{ label.txt }}</text>
-        </g>
-        <g :style="shading.secondary.combined">
-          <path :d="design.layer1.sec.pth"/>
-          <text
-              v-for="label in design.layer1.sec.lbl"
-              :x="label.co.x" :y="label.co.y"
-              :style="{'font-size': (0.7 * label.sz) + 'pt'}"
-          >{{ label.txt }}</text>
-        </g>
-
-        <path
-            v-for="indicator in design.layer1.ind"
-            :transform="'translate(' + indicator.co.x + ' ' + indicator.co.y + ')'"
-            :d="indicator.pth"
-            :style="(shading.indicator as any /* shut up */)[indicator.col][(instruments.indicators as any /* you too */ )[indicator.id].value ? 'on' : 'off']"
-        />
-
-        <g :style="shading.needle.needle">
-          <g
-              v-for="needle in design.layer1.ndl"
-              :transform="'translate(' + needle.co.x + ' ' + needle.co.y + ') rotate(' + (instruments.needles as any)[needle.id].value + ')'"
-          >
-            <path :d="needle.pth"/>
-            <circle r="20" fill="url('#needleCenter')" stroke="none"/>
-          </g>
-        </g>
-      </svg>
-    </div>
-  </div>
-
+  <dashboard @click="toggleFullscreen" />
 </template>
 
 <style>
@@ -169,50 +41,5 @@ body {
 </style>
 
 <style scoped>
-
-.container {
-  font-family: Roboto, "Helvetica Neue", sans-serif;
-  margin: 0;
-  width: 100vw;
-  height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.dashboard_top {
-  position: absolute;
-  container-type: inline-size;
-  container-name: dash;
-  max-width: 100vw;
-  max-height: 100vh;
-  height: 100vh;
-  text-anchor: middle;
-  dominant-baseline: central;
-}
-
-.dashboard_full {
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  right: 0;
-}
-
-.dashboard_occlusion {
-  filter: drop-shadow(1px 2px 30px #0004) drop-shadow(1px 2px 5px #0008);
-}
-
-.dashboard_desg7 {
-  font-family: "DSEG7 Classic Mini", monospace;
-  font-style: italic;
-  dominant-baseline: initial;
-}
-
-.dashboard_desg14 {
-  font-family: "DSEG14 Classic Mini", monospace;
-  font-style: italic;
-  dominant-baseline: initial;
-}
 
 </style>

@@ -42,6 +42,17 @@ custom-structures:
       jobExpected:
         key: job.delivery.time
 
+    location:
+      # Low resolution; used to estimate ambient lighting.
+      lat:
+        key: truck.world.placement.2
+        scale: 0.01
+        operator: round
+      lon:
+        key: truck.world.placement.0
+        scale: 0.01
+        operator: round
+
     electric:
       enabled:
         key: truck.electric.enabled
@@ -53,7 +64,6 @@ custom-structures:
         key: truck.engine.enabled
       rpm:
         key: truck.engine.rpm
-        scale: 0.1
         operator: round
       rpmLimit:
         key: truck.rpm.limit
@@ -81,7 +91,7 @@ custom-structures:
         key: truck.trailer.lift_axle.indicator
       speed:
         key: truck.speed
-        scale: 10
+        scale: 100
         operator: round
       odo:
         key: truck.odometer
@@ -119,6 +129,7 @@ custom-structures:
     oil:
       pressure:
         key: truck.oil.pressure
+        scale: 10
         operator: round
       indicator:
         key: truck.oil.pressure.warning
@@ -134,6 +145,7 @@ custom-structures:
     air:
       pressure:
         key: truck.brake.air.pressure
+        scale: 10
         operator: round
       indicator:
         key: truck.brake.air.pressure.warning

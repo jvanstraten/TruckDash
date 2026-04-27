@@ -122,58 +122,28 @@ export class TruckTelSocket {
      * handles automatic reconnection internally.
      */
     open(): void {
-        // Increment reference count.
         this.ref_count++;
         if (this.debug) {
             console.info(`TruckTelSocket.open() for ${this.debug_id}, ref_count is now ${this.ref_count}`);
         }
         if (this.ref_count > 1) return;
+        this.openInternal();
+    }
 
-        // Don't recreate if the socket already exists.
-        if (this.socket !== undefined) return;
-
-        // There's no reason why the development server should open the
-        // websocket, since we're targeting a static server anyway.
-        if (!import.meta.client) return;
-
-        // Open the websocket.
-        let socket_url: string = this.getSocketUrl();
+    /**
+     * Reopens the websocket, thus updating query, throttle, etc. Ignores
+     * reference counts; if there is at least one reference the socket is
+     * reopened, if there are no references the socket is closed, and can
+     * stay that way, since any future open() will have the same effect as
+     * reopen() would have had.
+     */
+    reopen(): void {
         if (this.debug) {
-            console.info("Opening websocket:", socket_url);
+            console.info(`TruckTelSocket.reopen() for ${this.debug_id}, ref_count is ${this.ref_count}`);
         }
-        this.socket = new WebSocket(socket_url);
-        this.socket.onmessage = (event: MessageEvent<any>): void => {
-            const raw_data: any = JSON.parse(event.data);
-            if (this.debug) console.info("WebSocket data:", raw_data);
-            TruckTelSocket.assignReactive(this.current, raw_data, true);
-            TruckTelSocket.assignReactive(this.latest, raw_data, false);
-            if (this.paused_key !== undefined) {
-                if (this.paused_key in raw_data) {
-                    this.paused = raw_data[this.paused_key];
-                }
-            }
-            TruckTelSocket.assignReactive(this.unpaused, raw_data, !this.paused);
-        };
-        this.socket.onopen = () => {
-            if (!this.connected) {
-                console.info("Game connected.");
-            }
-            this.connected = true;
-        };
-        this.socket.onclose = () => {
-            TruckTelSocket.assignReactive(this.current, null, true);
-            TruckTelSocket.assignReactive(this.unpaused, null, true);
-            if (this.connected) {
-                console.warn("Game disconnected. Trying to reconnect...");
-                this.connected = false;
-            }
-            setTimeout(() => {
-                this.socket = undefined;
-                this.open();
-            }, 1000);
-        };
-        this.socket.onerror =
-            (err) => { console.error("WebSocket error:", err); };
+        if (this.ref_count == 0) return;
+        this.closeInternal();
+        this.openInternal();
     }
 
     /**
@@ -185,14 +155,7 @@ export class TruckTelSocket {
             console.info(`TruckTelSocket.close() for ${this.debug_id}, ref_count is now ${this.ref_count}`);
         }
         if (this.ref_count > 0) return;
-        if (this.socket === undefined) return;
-        if (this.debug) {
-            console.info("Closing websocket...");
-        }
-        this.socket.onclose = () => {};
-        this.socket.close();
-        this.socket = undefined;
-        this.connected = false;
+        this.closeInternal();
     }
 
     /**
@@ -272,6 +235,72 @@ export class TruckTelSocket {
         }
         return `ws://${host}/api/ws/delta/${this.structure}/${
             this.query}?throttle=${this.throttle}`;
+    }
+
+    /**
+     * Internal logic to open the websocket, ignoring reference counts.
+     */
+    private openInternal(): void {
+
+        // Don't recreate if the socket already exists.
+        if (this.socket !== undefined) return;
+
+        // There's no reason why the development server should open the
+        // websocket, since we're targeting a static server anyway.
+        if (!import.meta.client) return;
+
+        // Open the websocket.
+        let socket_url: string = this.getSocketUrl();
+        if (this.debug) {
+            console.info("Opening websocket:", socket_url);
+        }
+        this.socket = new WebSocket(socket_url);
+        this.socket.onmessage = (event: MessageEvent<any>): void => {
+            const raw_data: any = JSON.parse(event.data);
+            if (this.debug) console.info("WebSocket data:", raw_data);
+            TruckTelSocket.assignReactive(this.current, raw_data, true);
+            TruckTelSocket.assignReactive(this.latest, raw_data, false);
+            if (this.paused_key !== undefined) {
+                if (this.paused_key in raw_data) {
+                    this.paused = raw_data[this.paused_key];
+                }
+            }
+            TruckTelSocket.assignReactive(this.unpaused, raw_data, !this.paused);
+        };
+        this.socket.onopen = () => {
+            if (!this.connected) {
+                console.info("Game connected.");
+            }
+            this.connected = true;
+        };
+        this.socket.onclose = () => {
+            TruckTelSocket.assignReactive(this.current, null, true);
+            TruckTelSocket.assignReactive(this.unpaused, null, true);
+            if (this.connected) {
+                console.warn("Game disconnected. Trying to reconnect...");
+                this.connected = false;
+            }
+            setTimeout(() => {
+                this.socket = undefined;
+                this.open();
+            }, 1000);
+        };
+        this.socket.onerror =
+            (err) => { console.error("WebSocket error:", err); };
+    }
+
+    /**
+     * Internal logic to close the websocket, ignoring reference counts.
+     */
+    private closeInternal(): void {
+        if (this.socket === undefined) return;
+        if (this.debug) {
+            console.info("Closing websocket...");
+        }
+        this.socket.onclose = () => {};
+        this.socket.close();
+        this.socket = undefined;
+        this.connected = false;
     }
 
     /**
