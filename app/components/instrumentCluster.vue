@@ -12,10 +12,10 @@ const { shading } = useShading(gameState, instruments, configuration);
 </script>
 
 <template>
-  <div class="dashboard_container" :style="{'background-color': shading.background}">
-    <div class="dashboard_top" :style="{'aspect-ratio': design.dim.view.w + ' / ' + design.dim.view.h}">
+  <div class="instrumentCluster_container" :style="{'background-color': shading.background}">
+    <div class="instrumentCluster_top" :style="{'aspect-ratio': design.dim.view.w + ' / ' + design.dim.view.h}">
       {{""/* Note: vue is being an idiot and is refusing to bind viewBox reliably, regardless of camelcase property workaround */}}
-      <svg class="dashboard_full" viewBox="0 0 1300 600">
+      <svg class="instrumentCluster_full" viewBox="0 0 1300 600">
         <!-- Details for the needles. -->
         <defs>
           <radialGradient id="needleCenter">
@@ -53,7 +53,7 @@ const { shading } = useShading(gameState, instruments, configuration);
               v-for="display in design.layer0.disp"
               :x="display.co.x" :y="display.co.y"
               :style="{'font-size': (0.7 * display.sz) + 'pt'}"
-              :class="['dashboard_' + display.fnt.toLowerCase()]"
+              :class="['instrumentCluster_' + display.fnt.toLowerCase()]"
           >{{ display.seg }}</text>
         </g>
 
@@ -61,7 +61,7 @@ const { shading } = useShading(gameState, instruments, configuration);
         <path
             v-if="configuration.performance.shadows"
             :d="design.layer1.pth"
-            class="dashboard_occlusion"
+            class="instrumentCluster_occlusion"
         />
 
         <!-- LAYER 0 EMISSION -->
@@ -86,7 +86,7 @@ const { shading } = useShading(gameState, instruments, configuration);
               v-for="display in design.layer0.disp"
               :x="display.co.x" :y="display.co.y"
               :style="{'font-size': (0.7 * display.sz) + 'pt'}"
-              :class="['dashboard_' + display.fnt.toLowerCase()]"
+              :class="['instrumentCluster_' + display.fnt.toLowerCase()]"
           >{{ (instruments.displays as any)[display.id].value }}</text>
         </g>
         <g :style="shading.needle.needle">
@@ -144,7 +144,7 @@ const { shading } = useShading(gameState, instruments, configuration);
 
 <style scoped>
 
-.dashboard_container {
+.instrumentCluster_container {
   font-family: Roboto, "Helvetica Neue", sans-serif;
   margin: 0;
   width: 100vw;
@@ -154,7 +154,7 @@ const { shading } = useShading(gameState, instruments, configuration);
   align-items: center;
 }
 
-.dashboard_top {
+.instrumentCluster_top {
   position: absolute;
   container-type: inline-size;
   container-name: dash;
@@ -165,7 +165,7 @@ const { shading } = useShading(gameState, instruments, configuration);
   dominant-baseline: central;
 }
 
-.dashboard_full {
+.instrumentCluster_full {
   position: absolute;
   top: 0;
   left: 0;
@@ -173,17 +173,17 @@ const { shading } = useShading(gameState, instruments, configuration);
   right: 0;
 }
 
-.dashboard_occlusion {
+.instrumentCluster_occlusion {
   filter: drop-shadow(1px 2px 30px #0004) drop-shadow(1px 2px 5px #0008);
 }
 
-.dashboard_desg7 {
+.instrumentCluster_desg7 {
   font-family: "DSEG7 Classic Mini", monospace;
   font-style: italic;
   dominant-baseline: initial;
 }
 
-.dashboard_desg14 {
+.instrumentCluster_desg14 {
   font-family: "DSEG14 Classic Mini", monospace;
   font-style: italic;
   dominant-baseline: initial;

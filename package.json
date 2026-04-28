@@ -10,6 +10,7 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
+    "@mdi/font": "^7.4.47",
     "@nuxt/fonts": "^0.14.0",
     "@vueuse/core": "^14.2.1",
     "color-core": "^1.4.0",
@@ -17,5 +18,9 @@
     "nuxt-mdi": "^2.1.2",
     "vue": "^3.5.32",
     "vue-router": "^5.0.4"
+  },
+  "devDependencies": {
+    "vite-plugin-vuetify": "^2.1.3",
+    "vuetify": "^4.0.6"
   }
 }

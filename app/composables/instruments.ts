@@ -103,7 +103,7 @@ export function useInstruments(gameState: any, configuration: any) {
         speed /= 100; // scale in config.yaml
         const max = gameState.unpaused.util.speedLimit as any;
         if (typeof max != "number" || max <= 0) return 0;
-        if (speed > max + 5) return 2;
+        if (speed > max + 3) return 2;
         if (speed > max + 1) return 1;
         return 0;
     }

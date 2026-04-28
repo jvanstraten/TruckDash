@@ -29,7 +29,7 @@ export const configDefaults = {
         // flat.
         needleDetails: true,
 
-        // Whether to fade indicators in and out. Gives a bulk-like effect.
+        // Whether to fade indicators in and out. Gives a bulb-like effect.
         // The LED-based indicators used in modern dashboards do not fade in
         // and out.
         animateIndicators: false,
