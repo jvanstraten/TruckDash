@@ -1,91 +1,58 @@
 import { onUnmounted, reactive, watch } from "vue";
 import { TruckTelSocket } from "~/lib/trucktel";
-import {useStorage} from "@vueuse/core";
+import type { Configuration, ConfigurationData, GameState } from "~/types/globals";
+import { useStorage } from "@vueuse/core";
 
 // Default configuration + configuration structure.
-export const configDefaults = {
+export const configDefaults: ConfigurationData = {
 
     // Preferences.
-    preferences: {
-        // Whether to enable shading based on the current time.
-        shading: true,
-
-        // Whether timezones are enabled in the game. Only affects dashboard
-        // shading.
-        timezones: true,
-    },
+    prefSelfTest: true,
+    prefClock12: false,
+    prefGearCruiseMode: "mixed-kmh",
+    prefShading: true,
+    prefTimezones: true,
+    prefDisplayStartup: true,
+    prefDisplayFollowsTruck: true,
+    prefDisplayStandby: true,
 
     // Settings that trade graphical fidelity for rendering speed.
-    performance: {
-        // Throttle value in milliseconds passed to TruckTel to avoid spamming
-        // updates. Animation aside, higher values reduce framerate.
-        telemetryThrottle: 0,
-
-        // Whether to animate needle positions, to give them some inertia when
-        // values change quickly.
-        animateNeedles: true,
-
-        // Add some extra visual detail to the needles to make them not look as
-        // flat.
-        needleDetails: true,
-
-        // Whether to fade indicators in and out. Gives a bulb-like effect.
-        // The LED-based indicators used in modern dashboards do not fade in
-        // and out.
-        animateIndicators: false,
-
-        // Whether to render a glow effect for things that emit light.
-        bloom: false,
-
-        // Whether to render shadows.
-        shadows: true,
-    },
+    perfTelemetryThrottle: 33,
+    perfAnimateNeedles: true,
+    perfNeedleDetails: true,
+    perfAnimateIndicators: false,
+    perfBloom: false,
+    perfShadows: true,
 
     // Theme and rendering configuration.
-    theme: {
-        // Dashboard background color.
-        background: '#444',
+    themeWorkspace: '#000',
+    themeWorkspaceFollowsBackground: true,
+    themeBackground: '#444',
+    themePrimary: '#DDD',
+    themeSecondary: '#F98',
+    themeBacklight: '#CFA',
+    themeDisplay: '#DDD',
+    themeIndicatorRed: '#F10',
+    themeIndicatorAmber: '#FA0',
+    themeIndicatorGreen: '#0F6',
+    themeIndicatorBlue: '#36F',
+    themeSegments: '#0000000C',
+    themeNeedle: '#C43',
+    themeNeedleBacklight: '#FFF',
+    themeNeedleStroke: '#0006',
 
-        // Primary diffuse color for dashboard markings.
-        primary: '#DDD',
-
-        // Secondary diffuse color used for out-of-range dashboard markings.
-        secondary: '#F98',
-
-        // Backlight color for dashboard markings.
-        backlight: '#CFA',
-
-        // Emission color for the displays.
-        display: '#DDD',
-
-        // Emission color for red indicators.
-        indicatorRed: '#F10',
-
-        // Emission color for amber indicators.
-        indicatorAmber: '#FA0',
-
-        // Emission color for green indicators.
-        indicatorGreen: '#0F6',
-
-        // Emission color for blue indicators.
-        indicatorBlue: '#36F',
-
-        // Color for segments and indicators that are off, to make them
-        // slightly visible when the dashboard is brightly lit.
-        segments: '#0000000C',
-
-        // Color for the needles.
-        needle: '#C43',
-
-        // Stroke color for the needles when needle details are enabled.
-        needleStroke: '#0006',
-    },
-
+    // Layout configuration.
+    layoutInstrumentsEnabled: true,
+    layoutInstrumentsPosition: { x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0 },
+    layoutDisplay1Address: "",
+    layoutDisplay1Position: { x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0 },
+    layoutDisplay2Address: "",
+    layoutDisplay2Position: { x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0 },
 };
 
 // Game state. This is a global/singleton because it's updated by the socket,
 // which we only want to have one of.
-const gameState = {
+const gameState: GameState = {
     current: reactive({
         paused: null,
     }),
@@ -175,7 +142,7 @@ gameSocket.dev_host = "localhost:8080";
 gameSocket.debug = true;
 
 // Register usage.
-export function useGlobals() {
+export function useGlobals(): { configuration: Configuration, gameState: GameState, gameSocket: TruckTelSocket } {
 
     // Load configuration.
     const configuration = useStorage(
@@ -194,8 +161,8 @@ export function useGlobals() {
     });
 
     // Reopen the socket when the throttle configuration parameter changes.
-    watch(() => configuration.value.performance.telemetryThrottle, () => {
-        gameSocket.throttle = configuration.value.performance.telemetryThrottle;
+    watch(() => configuration.value.perfTelemetryThrottle, () => {
+        gameSocket.throttle = configuration.value.perfTelemetryThrottle;
         gameSocket.reopen();
     }, { immediate: true });
 

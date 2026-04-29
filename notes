@@ -1,0 +1,96 @@
+left side gestures:
+ - swipe up: turn signal toward right
+ - swipe down: turn signal toward left
+ - swipe left: high beams on
+ - swipe right: high beams off
+ - tap + swipe left: low beams toward on
+ - tap + swipe right: low beams toward off
+ - tap + swipe up: wiper up
+ - tap + swipe down: wiper down
+
+right side gestures:
+ - swipe up: retarder down
+ - swipe down: retarder up
+ - swipe left: gear (hint) up
+ - swipe right: gear (hint) down
+ - tap + swipe left: transmission auto
+ - tap + swipe right: transmission sequential
+ - tap + swipe up: transmission toward drive
+ - tap + swipe down: transmission toward reverse
+
+center tap: open menu
+
+side panel options (stalks):
+  - blinker (up/down)
+  - lights (low up/down, high up/down)
+
+yes:
+    ignitionoff
+    ignitionon
+    ignitionstrt
+
+    lightoff
+    lightpark
+    lighton
+    hblight
+    beacon
+
+    lblinker
+    rblinker
+    flasher4way
+
+    attach
+    diflock
+    liftaxle
+    liftaxlet
+
+    wipers0
+    wipers1
+    wipers2
+    wipers3
+
+maybe:
+    frontsuspup
+    frontsuspdwn
+    rearsuspup
+    rearsuspdwn
+    suspreset
+
+    motorbrake
+    engbraketog
+    engbrakeup
+    engbrakedwn
+    trailerbrake
+    retarderup
+    retarderdown
+
+    rwinopen
+    rwinclose
+    lwinopen
+    lwinclose
+
+    cruiectrl
+    cruiectrlinc
+    cruiectrldec
+    cruiectrlres
+    accmode
+    laneassist
+
+gearup
+geardown
+gear0
+geardrive
+gearreverse
+gearuphint
+geardownhint
+transemi
+
+
+cmirrorsel
+fmirrorsel
+mirroryawl
+mirroryawr
+mirrorpitu
+mirrorpitl
+mirrorreset
+

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 
 import { useFullscreen } from '@vueuse/core'
-import instrumentCluster from "~/components/instrumentCluster.vue";
+import workspace from "~/components/workspace.vue";
 import configuration from "~/components/configuration.vue";
 
 const fullscreen = useFullscreen()
@@ -28,7 +28,14 @@ async function toggleFullscreen() {
   }
 }
 
+function github() {
+  window.location.href = 'https://www.github.com/jvanstraten/TruckDash/';
+}
+
 const mounted = ref(false);
+const menu = ref("main");
+const adjust = ref(false);
+
 onMounted(() => {
   mounted.value = true;
 });
@@ -37,8 +44,73 @@ onMounted(() => {
 
 <template>
   <v-app v-if="mounted">
-    <instrumentCluster/>
-    <configuration/>
+    <!--<iframe :src="nav" width="300" height="300"/-->
+    <v-dialog max-width="600">
+      <template v-slot:activator="{ props: activatorProps }">
+        <workspace v-model="adjust" v-bind="activatorProps"/>
+      </template>
+      <template v-slot:default="{ isActive }">
+        <v-card v-if="menu == 'main'" title="TruckDash" subtitle="Main menu">
+          <template v-slot:append>
+            <v-btn
+                icon="mdi-close"
+                @click="isActive.value = false"
+            ></v-btn>
+          </template>
+          <v-list lines="two" select-strategy="leaf">
+            <v-list-item
+                :title="fullscreen.isFullscreen.value ? 'Exit full screen' : 'Go full screen'"
+                :active="false"
+                @click="toggleFullscreen(); isActive.value = false"
+            >
+              <template v-slot:prepend>
+                <v-icon>{{ fullscreen.isFullscreen.value ? 'mdi-fullscreen-exit' : 'mdi-fullscreen' }}</v-icon>
+              </template>
+            </v-list-item>
+            <v-list-item
+                title="Configuration"
+                :active="false"
+                @click="menu = 'config'"
+            >
+              <template v-slot:prepend>
+                <v-icon>mdi-cog-outline</v-icon>
+              </template>
+            </v-list-item>
+            <v-list-item
+                title="Go to GitHub page"
+                :active="false"
+                @click="github"
+            >
+              <template v-slot:prepend>
+                <v-icon>mdi-information-outline</v-icon>
+              </template>
+            </v-list-item>
+            <v-list-item
+                title="Return"
+                :active="false"
+                @click="isActive.value = false"
+            >
+              <template v-slot:prepend>
+                <v-icon>mdi-arrow-left</v-icon>
+              </template>
+            </v-list-item>
+          </v-list>
+        </v-card>
+
+        <v-card v-if="menu == 'config'" title="Configuration">
+          <template v-slot:append>
+            <v-btn
+                icon="mdi-check"
+                @click="menu = 'main'"
+            ></v-btn>
+          </template>
+          <v-card-text>
+            <configuration @adjust="adjust = true; isActive.value = false"/>
+          </v-card-text>
+        </v-card>
+
+      </template>
+    </v-dialog>
   </v-app>
   <v-app v-else>
     <v-container fluid>
@@ -55,3 +127,13 @@ onMounted(() => {
     </v-container>
   </v-app>
 </template>
+
+<style>
+body, html {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
+  height: 100vh;
+  margin: 0;
+}
+</style>

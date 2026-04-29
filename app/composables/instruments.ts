@@ -1,9 +1,13 @@
 import { ref, computed } from "vue";
 import { design } from "~/data/design";
+import type { Configuration } from "~/types/globals";
+import type { Instruments } from "~/types/instruments";
+import type { NeedleConfig } from "~/types/design";
 
-export function useInstruments(gameState: any, configuration: any) {
+export function useInstruments(gameState: any, configuration: Configuration): { instruments: Instruments } {
 
     const mpsToKmh = 3.6;
+    const mpsToMph = 2.236936;
     const psiToBar = 0.06894757;
 
     function remainingTimeDisplay(remain: number): string {
@@ -26,22 +30,22 @@ export function useInstruments(gameState: any, configuration: any) {
         target: number,
         power: boolean,
         test: boolean,
-        design: { clp: [number, number], ofs: number, scl: number },
+        needleConfig: NeedleConfig,
         speed: number,
         timeDelta: number,
     ) {
         if (power) {
-            target *= design.scl;
-            target += design.ofs;
+            target *= needleConfig.scl;
+            target += needleConfig.ofs;
         } else {
-            target = design.scl > 0 ? design.clp[0] : design.clp[1];
+            target = needleConfig.scl > 0 ? needleConfig.clp[0] : needleConfig.clp[1];
         }
 
         // Animate only if needle animations are enabled.
         let pos: number = target;
-        if (configuration.value.performance.animateNeedles) {
+        if (configuration.value.perfAnimateNeedles) {
             if (test) {
-                target = design.scl > 0 ? design.clp[1] : design.clp[0];
+                target = needleConfig.scl > 0 ? needleConfig.clp[1] : needleConfig.clp[0];
             }
 
             // The "control loop," if you can call it that, is completely yolo'd and
@@ -81,16 +85,30 @@ export function useInstruments(gameState: any, configuration: any) {
             pos += moveBy;
         }
 
-        pos = Math.min(Math.max(design.clp[0], pos), design.clp[1]);
+        pos = Math.min(Math.max(needleConfig.clp[0], pos), needleConfig.clp[1]);
         output.value = pos;
     }
 
     const gearCruise = computed(() => {
-        let cc = gameState.unpaused.util.cruiseControl as any;
-        if (typeof cc == "number" && cc > 0) {
-            return Math.min(Math.round(cc * mpsToKmh), 99).toString().padStart(2, "!");
+        const mixed = configuration.value.prefGearCruiseMode.startsWith("mixed-");
+        const speed = configuration.value.prefGearCruiseMode.startsWith("speed-");
+        const mph = configuration.value.prefGearCruiseMode.endsWith("-mph");
+        const factor = (mph ? mpsToMph : mpsToKmh);
+
+        if (speed) {
+            let speed = gameState.unpaused.axles.speed;
+            if (typeof speed != "number") return "!!";
+            const value = Math.min(Math.round(Math.abs(speed) * factor / 100), 99);
+            return value.toString().padStart(2, "!");
         }
-        let gear = gameState.unpaused.transmission.indicatedGear as any;
+        if (mixed) {
+            let cc = gameState.unpaused.util.cruiseControl;
+            if (typeof cc == "number" && cc > 0) {
+                const value = Math.min(Math.round(cc * factor), 99);
+                return value.toString().padStart(2, "!");
+            }
+        }
+        let gear = gameState.unpaused.transmission.indicatedGear;
         if (typeof gear != "number") return "!!";
         if (gear < 0) return "R" + Math.min(-gear, 9).toString();
         if (gear == 0) return "N!";
@@ -98,10 +116,10 @@ export function useInstruments(gameState: any, configuration: any) {
     });
 
     function computeSpeedingLevel() {
-        let speed = gameState.unpaused.axles.speed as any;
+        let speed = gameState.unpaused.axles.speed;
         if (typeof speed != "number") return 0;
         speed /= 100; // scale in config.yaml
-        const max = gameState.unpaused.util.speedLimit as any;
+        const max = gameState.unpaused.util.speedLimit;
         if (typeof max != "number" || max <= 0) return 0;
         if (speed > max + 3) return 2;
         if (speed > max + 1) return 1;
@@ -112,58 +130,65 @@ export function useInstruments(gameState: any, configuration: any) {
 
     let lastFuelConsumption = 0;
 
-    const instruments = {
+    const systemChecks = {
+        lamps: ref(true),
+        adBlue: ref(true),
+        air: ref(true),
+        srs: ref(true),
+        alternator: ref(true),
+        coolant: ref(true),
+        engine: ref(true),
+        fuel: ref(true),
+        oil: ref(true),
+        brakes: ref(true),
+        powerSteering: ref(true),
+        transmission: ref(true),
+    };
+
+    const instruments: Instruments = {
         backlight: computed(() => {
             if (gameState.unpaused.lights.low || gameState.unpaused.lights.parking) return 1.0;
             return 0.0;
         }),
-        systemChecks: {
-            lamps: ref(true),
-            adBlue: ref(true),
-            air: ref(true),
-            srs: ref(true),
-            alternator: ref(true),
-            coolant: ref(true),
-            engine: ref(true),
-            fuel: ref(true),
-            oil: ref(true),
-            brakes: ref(true),
-            powerSteering: ref(true),
-            transmission: ref(true),
-        },
         displays: {
             brightness: computed((): number => {
                 if (!gameState.unpaused.electric.enabled) return 0.0;
                 return 1.0;
             }),
             clock: computed((): string => {
-                let time = gameState.unpaused.time.current as any;
+                let time = gameState.unpaused.time.current;
                 if (typeof time != "number") return "";
                 time = Math.floor(time);
                 const min = (time % 60).toString().padStart(2, "0");
                 time = Math.floor(time / 60);
-                const hrs = (time % 24).toString().padStart(2, "!");
+                if (configuration.value.prefClock12) {
+                    time %= 12;
+                    if (time == 0) time = 12;
+                } else {
+                    time %= 24;
+                }
+                const hrs = time.toString().padStart(2, "!");
                 return `!${hrs}:${min}`;
             }),
             deadline: computed((): string => {
-                const time = gameState.unpaused.time.current as any;
+                const time = gameState.unpaused.time.current;
                 if (typeof time != "number") return "";
-                const exp = gameState.unpaused.time.jobExpected as any;
+                const exp = gameState.unpaused.time.jobExpected;
                 if (typeof exp != "number") return "";
                 return remainingTimeDisplay(exp - time);
             }),
             eta: computed((): string => {
-                let remain = gameState.unpaused.time.navRemain as any;
+                let remain = gameState.unpaused.time.navRemain;
                 if (typeof remain != "number") return "";
                 return remainingTimeDisplay(remain - remain);
             }),
             rest: computed((): string => {
-                let remain = gameState.unpaused.time.restRemain as any;
+                let remain = gameState.unpaused.time.restRemain;
                 if (typeof remain != "number") return "";
                 return remainingTimeDisplay(remain - remain);
             }),
             odometer: computed((): string => {
-                let odo = gameState.unpaused.axles.odo as any;
+                let odo = gameState.unpaused.axles.odo;
                 if (typeof odo != "number") return "";
                 odo = Math.floor(odo);
                 odo %= 1000000;
@@ -182,67 +207,67 @@ export function useInstruments(gameState: any, configuration: any) {
             }),
             adBlue: computed((): boolean => {
                 if (!gameState.unpaused.electric.enabled) return false;
-                if (instruments.systemChecks.adBlue.value) return true;
+                if (systemChecks.adBlue.value) return true;
                 if (gameState.unpaused.adBlue.indicator) return true;
                 return false;
             }),
             air: computed((): boolean => {
                 if (!gameState.unpaused.electric.enabled) return false;
-                if (instruments.systemChecks.air.value) return true;
+                if (systemChecks.air.value) return true;
                 if (gameState.unpaused.air.indicator) return true;
                 return false;
             }),
             airbag: computed((): boolean => {
                 if (!gameState.unpaused.electric.enabled) return false;
-                if (instruments.systemChecks.srs.value) return true;
+                if (systemChecks.srs.value) return true;
                 return false;
             }),
             axleLift: computed((): boolean => {
                 if (!gameState.unpaused.electric.enabled) return false;
-                if (instruments.systemChecks.lamps.value) return true;
+                if (systemChecks.lamps.value) return true;
                 if (gameState.unpaused.axles.liftTruck) return true;
                 if (gameState.unpaused.axles.liftTrailer) return true;
                 return false;
             }),
             battery: computed((): boolean => {
                 if (!gameState.unpaused.electric.enabled) return false;
-                if (instruments.systemChecks.alternator.value) return true;
+                if (systemChecks.alternator.value) return true;
                 if (gameState.unpaused.electric.indicator) return true;
                 return false;
             }),
             beacon: computed((): boolean => {
-                if (instruments.systemChecks.lamps.value) return true;
+                if (systemChecks.lamps.value) return true;
                 if (gameState.unpaused.lights.beacon) return true;
                 return false;
             }),
             coolant: computed((): boolean => {
                 if (!gameState.unpaused.electric.enabled) return false;
-                if (instruments.systemChecks.coolant.value) return true;
+                if (systemChecks.coolant.value) return true;
                 if (gameState.unpaused.coolant.indicator) return true;
                 return false;
             }),
             cruiseControl: computed((): boolean => {
                 if (!gameState.unpaused.electric.enabled) return false;
-                if (instruments.systemChecks.lamps.value) return true;
+                if (systemChecks.lamps.value) return true;
                 if (gameState.unpaused.util.cruiseControl) return true;
                 return false;
             }),
             diffLock: computed((): boolean => {
                 if (!gameState.unpaused.electric.enabled) return false;
-                if (instruments.systemChecks.lamps.value) return true;
+                if (systemChecks.lamps.value) return true;
                 if (gameState.unpaused.transmission.diffLock) return true;
                 return false;
             }),
             engine: computed((): boolean => {
                 if (!gameState.unpaused.electric.enabled) return false;
-                if (instruments.systemChecks.engine.value) return true;
+                if (systemChecks.engine.value) return true;
                 if (gameState.unpaused.engine.wear === null) return false;
                 if (gameState.unpaused.engine.wear > 60) return true;
                 return false;
             }),
             fuel: computed((): boolean => {
                 if (!gameState.unpaused.electric.enabled) return false;
-                if (instruments.systemChecks.fuel.value) return true;
+                if (systemChecks.fuel.value) return true;
                 if (gameState.unpaused.fuel.indicator) return true;
                 return false;
             }),
@@ -254,133 +279,134 @@ export function useInstruments(gameState: any, configuration: any) {
             }),
             highBeam: computed((): boolean => {
                 if (!gameState.unpaused.electric.enabled) return false;
-                if (instruments.systemChecks.lamps.value) return true;
+                if (systemChecks.lamps.value) return true;
                 if (!gameState.unpaused.lights.low) return false;
                 if (gameState.unpaused.lights.high) return true;
                 return false;
             }),
             lowBeam: computed((): boolean => {
-                if (instruments.systemChecks.lamps.value) return true;
+                if (systemChecks.lamps.value) return true;
                 if (gameState.unpaused.lights.low) return true;
                 return false;
             }),
             oil: computed((): boolean => {
                 if (!gameState.unpaused.electric.enabled) return false;
-                if (instruments.systemChecks.oil.value) return true;
+                if (systemChecks.oil.value) return true;
                 if (gameState.unpaused.oil.indicator) return true;
                 return false;
             }),
             parkingBrake: computed((): boolean => {
                 if (!gameState.unpaused.electric.enabled) return false;
-                if (instruments.systemChecks.brakes.value) return true;
+                if (systemChecks.brakes.value) return true;
                 if (gameState.unpaused.brake.parking) return true;
                 return false;
             }),
             parkingLights: computed((): boolean => {
-                if (instruments.systemChecks.lamps.value) return true;
+                if (systemChecks.lamps.value) return true;
                 if (gameState.unpaused.lights.low) return false;
                 if (gameState.unpaused.lights.parking) return true;
                 return false;
             }),
             powerSteering: computed((): boolean => {
                 if (!gameState.unpaused.electric.enabled) return false;
-                if (instruments.systemChecks.lamps.value) return true;
-                if (instruments.systemChecks.powerSteering.value) return true;
+                if (systemChecks.lamps.value) return true;
+                if (systemChecks.powerSteering.value) return true;
                 return false;
             }),
             retarder: computed((): boolean => {
                 if (!gameState.unpaused.electric.enabled) return false;
-                if (instruments.systemChecks.lamps.value) return true;
+                if (systemChecks.lamps.value) return true;
                 if (gameState.unpaused.brake.retarder) return true;
                 if (gameState.unpaused.brake.motor) return true;
                 return false;
             }),
             speeding: computed((): boolean => {
                 if (!gameState.unpaused.electric.enabled) return false;
-                if (instruments.systemChecks.lamps.value) return true;
+                if (systemChecks.lamps.value) return true;
                 return speeding.value;
             }),
             transmission: computed((): boolean => {
                 if (!gameState.unpaused.electric.enabled) return false;
-                if (instruments.systemChecks.transmission.value) return true;
+                if (systemChecks.transmission.value) return true;
                 if (gameState.unpaused.transmission.wear !== null && gameState.unpaused.transmission.wear > 60) return true;
                 if (gameState.unpaused.transmission.realGear === 0) return false;
                 if (gameState.unpaused.transmission.indicatedGear !== gameState.unpaused.transmission.realGear) return true;
                 return false;
             }),
             turnLeft: computed((): boolean => {
-                if (instruments.systemChecks.lamps.value) return true;
+                if (systemChecks.lamps.value) return true;
                 if (gameState.unpaused.lights.turnLeft) return true;
                 return false;
             }),
             turnRight: computed((): boolean => {
-                if (instruments.systemChecks.lamps.value) return true;
+                if (systemChecks.lamps.value) return true;
                 if (gameState.unpaused.lights.turnRight) return true;
                 return false;
             }),
         },
-        needleTargets: {
-            air: computed((): number => {
-                const psi = gameState.unpaused.air.pressure as any;
-                if (typeof psi != "number") return 0;
-                return psi * psiToBar / 10; // revert rounding scale from config.yaml
-            }),
-            coolant: computed((): number => {
-                const coolant = gameState.unpaused.coolant.temperature as any;
-                if (typeof coolant != "number") return 0;
-                return coolant / 2; // revert rounding scale from config.yaml
-            }),
-            fuel: computed((): number => {
-                const amount = gameState.unpaused.fuel.amount as any;
-                if (typeof amount != "number") return 0;
-                const capacity = gameState.unpaused.fuel.capacity as any;
-                if (typeof capacity != "number" || capacity < 1) return 0;
-                return amount / capacity;
-            }),
-            adBlue: computed((): number => {
-                const amount = gameState.unpaused.adBlue.amount as any;
-                if (typeof amount != "number") return 0;
-                const capacity = gameState.unpaused.adBlue.capacity as any;
-                if (typeof capacity != "number" || capacity < 1) return 0;
-                return amount / capacity;
-            }),
-            oil: computed((): number => {
-                const psi = gameState.unpaused.oil.pressure as any;
-                if (typeof psi != "number") return 0;
-                return psi * psiToBar / 10; // revert rounding scale from config.yaml
-            }),
-            speed: computed((): number => {
-                const speed = gameState.unpaused.axles.speed as any;
-                if (typeof speed != "number") return 0;
-                return Math.abs(speed) / 100; // revert rounding scale from config.yaml
-            }),
-            rpm: computed((): number => {
-                const rpm = gameState.unpaused.engine.rpm as any;
-                if (typeof rpm != "number") return 0;
-                const limit = gameState.unpaused.engine.rpmLimit as any;
-                if (typeof limit != "number" || limit < 1) return 0;
-                return rpm / limit;
-            }),
-            consumption: computed((): number => {
-                let amount = gameState.unpaused.fuel.consumption as any;
-                if (typeof amount != "number") amount = 0;
-                if (amount == 0) {
-                    amount = lastFuelConsumption;
-                } else {
-                    lastFuelConsumption = amount;
-                }
-                return amount / 10;
-            }),
-        },
         needles: {
-            air: ref(design.layer1.ndl.air.clp[1]),
-            coolant: ref(design.layer1.ndl.coolant.clp[0]),
-            fuel: ref(design.layer1.ndl.fuel.clp[0]),
-            oil: ref(design.layer1.ndl.oil.clp[1]),
-            speed: ref(design.layer1.ndl.speed.clp[0]),
-            rpm: ref(design.layer0.ndl.rpm.clp[0]),
-            consumption: ref(design.layer0.ndl.consumption.clp[1]),
+            air: ref(design.ncfg.air.clp[1]),
+            coolant: ref(design.ncfg.coolant.clp[0]),
+            fuel: ref(design.ncfg.fuel.clp[0]),
+            oil: ref(design.ncfg.oil.clp[1]),
+            speed: ref(design.ncfg.speed.clp[0]),
+            rpm: ref(design.ncfg.rpm.clp[0]),
+            consumption: ref(design.ncfg.consumption.clp[1]),
         },
+    };
+    
+    const needleTargets = {
+        air: computed((): number => {
+            const psi = gameState.unpaused.air.pressure;
+            if (typeof psi != "number") return 0;
+            return psi * psiToBar / 10; // revert rounding scale from config.yaml
+        }),
+            coolant: computed((): number => {
+            const coolant = gameState.unpaused.coolant.temperature;
+            if (typeof coolant != "number") return 0;
+            return coolant / 2; // revert rounding scale from config.yaml
+        }),
+            fuel: computed((): number => {
+            const amount = gameState.unpaused.fuel.amount;
+            if (typeof amount != "number") return 0;
+            const capacity = gameState.unpaused.fuel.capacity;
+            if (typeof capacity != "number" || capacity < 1) return 0;
+            return amount / capacity;
+        }),
+            adBlue: computed((): number => {
+            const amount = gameState.unpaused.adBlue.amount;
+            if (typeof amount != "number") return 0;
+            const capacity = gameState.unpaused.adBlue.capacity;
+            if (typeof capacity != "number" || capacity < 1) return 0;
+            return amount / capacity;
+        }),
+            oil: computed((): number => {
+            const psi = gameState.unpaused.oil.pressure;
+            if (typeof psi != "number") return 0;
+            return psi * psiToBar / 10; // revert rounding scale from config.yaml
+        }),
+            speed: computed((): number => {
+            const speed = gameState.unpaused.axles.speed;
+            if (typeof speed != "number") return 0;
+            return Math.abs(speed) / 100; // revert rounding scale from config.yaml
+        }),
+            rpm: computed((): number => {
+            const rpm = gameState.unpaused.engine.rpm;
+            if (typeof rpm != "number") return 0;
+            const limit = gameState.unpaused.engine.rpmLimit;
+            if (typeof limit != "number" || limit < 1) return 0;
+            return rpm / limit;
+        }),
+            consumption: computed((): number => {
+            let amount = gameState.unpaused.fuel.consumption;
+            if (typeof amount != "number") amount = 0;
+            if (amount == 0) {
+                amount = lastFuelConsumption;
+            } else {
+                lastFuelConsumption = amount;
+            }
+            return amount / 10;
+        }),
     };
 
     // Timers for various animations.
@@ -391,7 +417,7 @@ export function useInstruments(gameState: any, configuration: any) {
     function animate(timeDelta: number) {
         // Get main vehicle system state.
         const power = !!gameState.unpaused.electric.enabled;
-        const rpm = gameState.unpaused.engine.rpm as any;
+        const rpm = gameState.unpaused.engine.rpm;
         const engine = typeof rpm === "number" && rpm > 200;
 
         // Update timers.
@@ -409,31 +435,34 @@ export function useInstruments(gameState: any, configuration: any) {
             engineRunningMillis = 0;
         }
 
-        // Animate needles.
-        const test = power && electricEnabledMillis < 1500;
-        updateNeedle(instruments.needles.air, instruments.needleTargets.air.value, power, test, design.layer1.ndl.air, 6, timeDelta);
-        updateNeedle(instruments.needles.coolant, instruments.needleTargets.coolant.value, power, test, design.layer1.ndl.coolant, 4.5, timeDelta);
-        updateNeedle(instruments.needles.fuel, Math.min(instruments.needleTargets.fuel.value, instruments.needleTargets.adBlue.value), power, test, design.layer1.ndl.fuel, 4, timeDelta);
-        updateNeedle(instruments.needles.oil, instruments.needleTargets.oil.value, power, test, design.layer1.ndl.oil, 5, timeDelta);
-        updateNeedle(instruments.needles.speed, instruments.needleTargets.speed.value, power, test, design.layer1.ndl.speed, 5.3, timeDelta);
-        updateNeedle(instruments.needles.rpm, instruments.needleTargets.rpm.value, power, test, design.layer0.ndl.rpm, 5.5, timeDelta);
-        updateNeedle(instruments.needles.consumption, instruments.needleTargets.consumption.value, power, test, design.layer0.ndl.consumption, 2, timeDelta);
+        // Whether to run self-tests.
+        const runTests = configuration.value.prefSelfTest;
 
         // Model startup/self-tests of electrical systems.
-        instruments.systemChecks.lamps.value = power && electricEnabledMillis < 1000;
-        instruments.systemChecks.air.value = electricEnabledMillis < 1400;
-        instruments.systemChecks.coolant.value = electricEnabledMillis < 1850;
-        instruments.systemChecks.fuel.value = electricEnabledMillis < 2400;
-        instruments.systemChecks.adBlue.value = electricEnabledMillis < 2600;
-        instruments.systemChecks.brakes.value = electricEnabledMillis < 3300;
-        instruments.systemChecks.transmission.value = electricEnabledMillis < 4100;
-        instruments.systemChecks.srs.value = electricEnabledMillis < 5900;
+        systemChecks.lamps.value = runTests && power && electricEnabledMillis < 1000;
+        systemChecks.air.value = runTests && electricEnabledMillis < 1400;
+        const needleTest = runTests && power && electricEnabledMillis < 1500;
+        systemChecks.coolant.value = runTests && electricEnabledMillis < 1850;
+        systemChecks.fuel.value = runTests && electricEnabledMillis < 2400;
+        systemChecks.adBlue.value = runTests && electricEnabledMillis < 2600;
+        systemChecks.brakes.value = runTests && electricEnabledMillis < 3300;
+        systemChecks.transmission.value = runTests && electricEnabledMillis < 4100;
+        systemChecks.srs.value = runTests && electricEnabledMillis < 5900;
 
         // Model startup/self-tests of engine-powered systems.
-        instruments.systemChecks.oil.value = engineRunningMillis < 1100;
-        instruments.systemChecks.alternator.value = engineRunningMillis < 1800;
-        instruments.systemChecks.engine.value = engineRunningMillis < 2800;
-        instruments.systemChecks.powerSteering.value = engineRunningMillis < 4900;
+        systemChecks.oil.value = runTests && engineRunningMillis < 1100;
+        systemChecks.alternator.value = runTests && engineRunningMillis < 1800;
+        systemChecks.engine.value = runTests && engineRunningMillis < 2800;
+        systemChecks.powerSteering.value = runTests && engineRunningMillis < 4900;
+
+        // Animate needles.
+        updateNeedle(instruments.needles.air, needleTargets.air.value, power, needleTest, design.ncfg.air, 6, timeDelta);
+        updateNeedle(instruments.needles.coolant, needleTargets.coolant.value, power, needleTest, design.ncfg.coolant, 4.5, timeDelta);
+        updateNeedle(instruments.needles.fuel, Math.min(needleTargets.fuel.value, needleTargets.adBlue.value), power, needleTest, design.ncfg.fuel, 4, timeDelta);
+        updateNeedle(instruments.needles.oil, needleTargets.oil.value, power, needleTest, design.ncfg.oil, 5, timeDelta);
+        updateNeedle(instruments.needles.speed, needleTargets.speed.value, power, needleTest, design.ncfg.speed, 5.3, timeDelta);
+        updateNeedle(instruments.needles.rpm, needleTargets.rpm.value, power, needleTest, design.ncfg.rpm, 5.5, timeDelta);
+        updateNeedle(instruments.needles.consumption, needleTargets.consumption.value, power, needleTest, design.ncfg.consumption, 2, timeDelta);
 
         // Animate the speeding indicator.
         switch (computeSpeedingLevel()) {
