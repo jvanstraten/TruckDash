@@ -48,6 +48,22 @@ export const configDefaults: ConfigurationData = {
     layoutDisplay1Position: { x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0 },
     layoutDisplay2Address: "",
     layoutDisplay2Position: { x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0 },
+
+    // Stalk configuration.
+    stalkGestureMode: "bothStalks",
+    stalkGestureSwitches: "outer",
+    stalkHoldForMenu: false,
+    stalkSwap: "lhd",
+    stalkInvertLowBeam: false,
+    stalkInvertHighBeam: false,
+    stalkInvertWipers: false,
+    stalkInvertTransPaddle: false,
+    stalkInvertTransBrake: false,
+    stalkInvertTransMode: false,
+    stalkInvertTransDirection: false,
+    stalkSwapPaddleBrake: false,
+    stalkSwapModeDirection: false,
+
 };
 
 // Game state. This is a global/singleton because it's updated by the socket,

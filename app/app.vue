@@ -32,25 +32,39 @@ function github() {
   window.location.href = 'https://www.github.com/jvanstraten/TruckDash/';
 }
 
-const mounted = ref(false);
-const menu = ref("main");
-const adjust = ref(false);
+const mounted = ref<boolean>(false);
+const menuOpen = ref<boolean>(false);
+const currentMenu = ref<"main" | "config">("main");
+const adjust = ref<boolean>(false);
+const mapping = ref<boolean>(false);
 
 onMounted(() => {
   mounted.value = true;
 });
 
+function openMenu() {
+  if (adjust.value) {
+    adjust.value = false;
+    return;
+  }
+  if (mapping.value) {
+    mapping.value = false;
+    currentMenu.value = "config";
+    menuOpen.value = true;
+    return;
+  }
+  currentMenu.value = "main";
+  menuOpen.value = true;
+}
+
 </script>
 
 <template>
   <v-app v-if="mounted">
-    <!--<iframe :src="nav" width="300" height="300"/-->
-    <v-dialog max-width="600">
-      <template v-slot:activator="{ props: activatorProps }">
-        <workspace v-model="adjust" v-bind="activatorProps"/>
-      </template>
+    <workspace :adjust="adjust" :mapping="mapping" @menu="openMenu"/>
+    <v-dialog max-width="600" height="100%" v-model="menuOpen">
       <template v-slot:default="{ isActive }">
-        <v-card v-if="menu == 'main'" title="TruckDash" subtitle="Main menu">
+        <v-card v-if="currentMenu == 'main'" title="TruckDash" subtitle="Main menu">
           <template v-slot:append>
             <v-btn
                 icon="mdi-close"
@@ -70,7 +84,7 @@ onMounted(() => {
             <v-list-item
                 title="Configuration"
                 :active="false"
-                @click="menu = 'config'"
+                @click="currentMenu = 'config'"
             >
               <template v-slot:prepend>
                 <v-icon>mdi-cog-outline</v-icon>
@@ -82,7 +96,7 @@ onMounted(() => {
                 @click="github"
             >
               <template v-slot:prepend>
-                <v-icon>mdi-information-outline</v-icon>
+                <v-icon>mdi-source-branch</v-icon>
               </template>
             </v-list-item>
             <v-list-item
@@ -97,15 +111,15 @@ onMounted(() => {
           </v-list>
         </v-card>
 
-        <v-card v-if="menu == 'config'" title="Configuration">
+        <v-card v-if="currentMenu == 'config'" title="TruckDash" subtitle="Configuration">
           <template v-slot:append>
-            <v-btn
-                icon="mdi-check"
-                @click="menu = 'main'"
-            ></v-btn>
+            <v-btn icon="mdi-arrow-left" @click="currentMenu = 'main'"/>
           </template>
           <v-card-text>
-            <configuration @adjust="adjust = true; isActive.value = false"/>
+            <configuration
+                @adjust="adjust = true; isActive.value = false"
+                @mapping="mapping = true; isActive.value = false"
+            />
           </v-card-text>
         </v-card>
 

@@ -43,6 +43,19 @@ export type ConfigurationData = {
     layoutDisplay1Position: UiPosition,
     layoutDisplay2Address: string,
     layoutDisplay2Position: UiPosition,
+    stalkGestureMode: "bothStalks" | "leftStalk" | "rightStalk" | "disabled",
+    stalkGestureSwitches: "outer" | "inner" | "click",
+    stalkHoldForMenu: boolean,
+    stalkSwap: "lhd" | "rhd",
+    stalkInvertLowBeam: boolean,
+    stalkInvertHighBeam: boolean,
+    stalkInvertWipers: boolean,
+    stalkSwapPaddleBrake: boolean,
+    stalkInvertTransPaddle: boolean,
+    stalkInvertTransBrake: boolean,
+    stalkSwapModeDirection: boolean,
+    stalkInvertTransDirection: boolean,
+    stalkInvertTransMode: boolean,
 };
 
 export type Configuration = RemovableRef<ConfigurationData>;

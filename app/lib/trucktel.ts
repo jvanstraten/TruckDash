@@ -99,9 +99,7 @@ export class TruckTelSocket {
     dev_host: string = "localhost:8080";
 
     /**
-     * Whether to print extra debug messages to the console. Defaults to
-     * whether we're in development mode or not. Replace this after
-     * construction to override.
+     * Whether to print extra debug messages to the console.
      */
     debug: boolean = false;
 
@@ -274,6 +272,9 @@ export class TruckTelSocket {
             this.connected = true;
         };
         this.socket.onclose = () => {
+            if (this.debug) {
+                console.info("Websocket onclose()");
+            }
             TruckTelSocket.assignReactive(this.current, null, true);
             TruckTelSocket.assignReactive(this.unpaused, null, true);
             if (this.connected) {
@@ -282,7 +283,7 @@ export class TruckTelSocket {
             }
             setTimeout(() => {
                 this.socket = undefined;
-                this.open();
+                this.openInternal();
             }, 1000);
         };
         this.socket.onerror =
