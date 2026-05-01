@@ -54,8 +54,10 @@ export const configDefaults: ConfigurationData = {
     layoutInstrumentsPosition: { x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0 },
     layoutDisplay1Address: "",
     layoutDisplay1Position: { x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0 },
+    layoutDisplay1Zoom: 0,
     layoutDisplay2Address: "",
     layoutDisplay2Position: { x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0 },
+    layoutDisplay2Zoom: 0,
 
     // Stalk configuration.
     stalkGestureMode: "bothStalks",

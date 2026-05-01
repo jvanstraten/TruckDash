@@ -1,5 +1,3 @@
-zoom control for displays
-flat shading for displays
 control stalk design
 swipe controls
 truck config quick action menu (power, trailer hook, diff lock, lift axle x2)

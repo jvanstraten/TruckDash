@@ -57,8 +57,10 @@ export type ConfigurationData = {
     layoutInstrumentsPosition: UiPosition,
     layoutDisplay1Address: string,
     layoutDisplay1Position: UiPosition,
+    layoutDisplay1Zoom: number,
     layoutDisplay2Address: string,
     layoutDisplay2Position: UiPosition,
+    layoutDisplay2Zoom: number,
 
     stalkGestureMode: "bothStalks" | "leftStalk" | "rightStalk" | "disabled",
     stalkGestureSwitches: "outer" | "inner" | "click",

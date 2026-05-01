@@ -10,6 +10,8 @@ import configDisplay from "~/components/configDisplay.vue";
 import type { UiPosition, ConfigurationData } from "~/types/globals";
 const { configuration } = useGlobals();
 
+const emit = defineEmits(["adjust", "mapping"]);
+
 const tab = ref('general');
 const chosenFile = ref();
 
@@ -217,17 +219,19 @@ function restoreFile() {
         <configDisplay
             :title="'Display A'"
             subtitle="Nests a web app from another mod like TruckDash into the page, as if it's an infotainment display."
-            v-model="configuration.layoutDisplay1Address"
+            v-model:address="configuration.layoutDisplay1Address"
+            v-model:zoom="configuration.layoutDisplay1Zoom"
         />
         <configDisplay
             :title="'Display B'"
             subtitle="One nested web app not enough? Have a second one!"
-            v-model="configuration.layoutDisplay2Address"
+            v-model:address="configuration.layoutDisplay2Address"
+            v-model:zoom="configuration.layoutDisplay2Zoom"
         />
         <configItem
             title="Adjust"
             subtitle="Adjust the positioning of the components activated above."
-            @activate="$emit('adjust')"
+            @activate="emit('adjust')"
         >
           <template v-slot:prepend>
             <v-icon>mdi-cursor-move</v-icon>
@@ -373,7 +377,7 @@ function restoreFile() {
         <configItem
             title="Test input mapping"
             subtitle="Show how gestures are currently mapped."
-            @activate="$emit('mapping')"
+            @activate="emit('mapping')"
         >
           <template v-slot:prepend>
             <v-icon>mdi-information-outline</v-icon>

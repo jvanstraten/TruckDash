@@ -243,7 +243,6 @@ const cp2Coords = computed(() => {
 <style scoped>
 
 .uic-content {
-  overflow: hidden;
   position: absolute;
   container-name: uic-content;
   container-type: inline-size;

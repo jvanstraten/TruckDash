@@ -6,17 +6,23 @@ import type { ConfigurationData, GameState} from "~/types/globals";
 
 const {
   address,
+  zoom,
   configuration,
   gameState,
   shading,
 } = defineProps<{
   address: string,
+  zoom: number,
   configuration: ConfigurationData,
   gameState: GameState,
   shading: Shading,
 }>();
 
 const validatedUrl = computed(() => validateDisplayUrl(address));
+
+//-----------------------------------------------------------------------------
+// Power-up animation
+//-----------------------------------------------------------------------------
 
 const powerState = ref(0);
 const powerStateOff = 0.0;
@@ -87,14 +93,55 @@ watch(gameState.unpaused.electric, (a, b) => {
 
 onUnmounted(() => stopTimer());
 
+//-----------------------------------------------------------------------------
+// Size and scale
+//-----------------------------------------------------------------------------
+
+const iframeStyle = ref({});
+const el = useTemplateRef("lcd");
+let lcdWidth = 0;
+let lcdHeight = 0;
+
+function updateSize() {
+  const aspect = lcdWidth / lcdHeight;
+  const width = window.innerWidth / Math.pow(2, zoom);
+  const height = width / aspect;
+  const scale = lcdWidth / width;
+
+  iframeStyle.value = {
+    width: `${width}px`,
+    height: `${height}px`,
+    zoom: `${scale}`,
+  };
+}
+
+// ?????
+const zoomLocal = computed(() => zoom);
+watch(zoomLocal, () => updateSize());
+
+const resizeObserver = new ResizeObserver((entries) => {
+  const entry = entries[0]!;
+  lcdWidth = entry.contentRect.width;
+  lcdHeight = entry.contentRect.height;
+  updateSize();
+});
+
+onMounted(() => {
+  resizeObserver.observe(el.value!);
+});
+onUnmounted(() => {
+  resizeObserver.disconnect();
+});
+
 </script>
 
 <template>
-  <div class="display-bezel" :style="{'background-color': shading.background}">
+  <div :class="['display-bezel', configuration.perfShadows ? 'display-bezel-shaded' : '']" :style="{'background-color': shading.background}">
     <div class="display-lcd-outer">
-      <div class="display-lcd-inner">
+      <div class="display-lcd-inner" ref="lcd">
         <iframe
-            class="display-lcd display-iframe"
+            class="display-iframe"
+            :style="iframeStyle"
             v-if="validatedUrl.valid && powerState >= powerStateStandby"
             :src="validatedUrl.url!.toString()"
         />
@@ -113,8 +160,14 @@ onUnmounted(() => stopTimer());
         </div>
       </div>
     </div>
-    <div class="display-power-outer" @click.stop.prevent="togglePower()">
-      <div class="display-power-inner" :style="shading.divIndicator[powerState < powerStateOn ? 'amber' : 'green'][powerState >= powerStateLightOn ? 'on' : 'off']"/>
+    <div
+        :class="['display-power-outer', configuration.perfShadows ? 'display-power-outer-shaded' : '']"
+        @click.stop.prevent="togglePower()" @pointermove.stop @pointerdown.stop
+    >
+      <div
+          :class="['display-power-inner', configuration.perfShadows ? ' display-power-inner-shaded' : '']"
+          :style="shading.divIndicator[powerState < powerStateOn ? 'amber' : 'green'][powerState >= powerStateLightOn ? 'on' : 'off']"
+      />
     </div>
   </div>
 </template>
@@ -128,7 +181,13 @@ onUnmounted(() => stopTimer());
   right: 0;
   bottom: 0;
   border-radius: 4cqw;
+  border: 0.2cqw solid #000;
+}
+
+.display-bezel-shaded {
   box-shadow: inset 0 0 0.5cqw #000;
+  filter: drop-shadow(0 0 1vw #000);
+  border: none !important;
 }
 
 .display-power-outer {
@@ -139,19 +198,29 @@ onUnmounted(() => stopTimer());
   height: 5cqw;
   padding: 2cqw;
   border-radius: 1cqw 1cqw 0 0;
+  border: 0.2cqw solid #000;
+  border-bottom: none;
+}
+
+.display-power-outer-shaded {
   box-shadow: inset 0 0 0.5cqw #000;
+  border: none !important;
 }
 
 .display-power-inner {
   position: absolute;
-  left: 2.5cqw;
-  top: 1.5cqw;
-  right: 2.5cqw;
-  bottom: 2.5cqw;
+  left: 2.4cqw;
+  top: 1.4cqw;
+  right: 2.4cqw;
+  bottom: 2.4cqw;
   border-radius: 0.5cqw;
-  box-shadow: 0 0 0.3cqw #000;
+  border: 0.1cqw solid #000;
   /* Hack for glow effect size: */
   font-size: 1cqw;
+}
+
+.display-power-inner-shaded {
+  box-shadow: 0 0 0.3cqw #000;
 }
 
 .display-lcd-outer {
@@ -183,6 +252,10 @@ onUnmounted(() => stopTimer());
 }
 
 .display-iframe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
   border: none;
 }
 

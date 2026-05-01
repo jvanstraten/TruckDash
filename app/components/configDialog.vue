@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import configItem from "~/components/configItem.vue";
 defineProps(["title", "subtitle", "text", "enabled", "value"]);
-const dialog = ref(false);
+const emit = defineEmits(["activate"]);
+const dialog = defineModel<boolean>();
 </script>
 
 <template>
@@ -10,7 +11,7 @@ const dialog = ref(false);
       :subtitle="subtitle"
       :enabled="enabled"
       :value="value"
-      @activate="dialog = true"
+      @activate="dialog = true; emit('activate')"
   >
     <template v-slot:prepend><slot name="prepend"/></template>
     <template v-slot:append><v-icon>mdi-dots-horizontal</v-icon></template>

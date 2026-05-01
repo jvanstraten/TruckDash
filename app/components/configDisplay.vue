@@ -3,20 +3,21 @@ import configDialog from "~/components/configDialog.vue";
 import {validateDisplayUrl} from "~/misc/displayUrl";
 
 defineProps(["title", "subtitle"]);
-const model = defineModel<string>({ required: true });
+const address = defineModel<string>("address", { required: true });
+const zoom = defineModel<number>("zoom", { required: true });
 
 const dialogActive = ref(false);
-const enteredUrl = ref("")
+const enteredUrl = ref("");
 
-function click() {
-  enteredUrl.value = model.value;
+function activate() {
+  enteredUrl.value = address.value;
   dialogActive.value = true;
 }
 
 async function submit(event: any) {
   const results = await event;
   if (results.valid) {
-    model.value = enteredUrl.value;
+    address.value = enteredUrl.value;
     dialogActive.value = false;
   }
 }
@@ -36,28 +37,45 @@ const rules = [
   <configDialog
       :title="title"
       :subtitle="subtitle"
-      :value="model"
-      @click="click"
+      :value="address"
+      v-model="dialogActive"
+      @activate="activate"
   >
     <template v-slot:prepend>
-      <v-icon v-if="model">mdi-checkbox-intermediate</v-icon>
+      <v-icon v-if="address">mdi-checkbox-intermediate</v-icon>
       <v-icon v-else>mdi-checkbox-blank-outline</v-icon>
     </template>
     <template v-slot:default="{ isActive }">
       <v-form validate-on="submit lazy" @submit.prevent="submit">
-        <v-card-text>
-          <div class="text-body-medium text-medium-emphasis mb-4">
+        <v-card-text style="margin-top: -2em">
+          <p class="text-medium-emphasis">
             Enter the address of the web app you want to embed. This can be a full
             address, or just the port (and possibly path) of another app running in
             TruckTel, or at least on the computer that the game is running on, e.g.
             <span class="text-high-emphasis ">:30001</span>.
-          </div>
-          <v-spacer></v-spacer>
+          </p>
           <v-text-field
               v-model="enteredUrl"
               :rules="rules"
               label="Address"
           ></v-text-field>
+          <p class="text-medium-emphasis">
+            By default, the embedded page is rendered as it would be if it filled
+            the screen of your device (or your browser window), and then scaled to
+            fit the display. You can add an additional scale factor below.
+          </p>
+          <v-slider
+              min="-2"
+              max="2"
+              v-model="zoom"
+              thumb-label="hover"
+              label="Zoom"
+          >
+            <template v-slot:thumb-label="{ modelValue }">
+              {{ Math.round(Math.pow(2, modelValue) * 100) }}%
+            </template>
+          </v-slider>
+          <v-spacer></v-spacer>
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
@@ -67,7 +85,7 @@ const rules = [
           ></v-btn>
           <v-btn
               text="Disable"
-              @click="isActive.value = false; model = ''"
+              @click="isActive.value = false; address = ''"
           ></v-btn>
           <v-btn
               text="Enable"

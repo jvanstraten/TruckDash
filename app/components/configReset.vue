@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import configDialog from "~/components/configDialog.vue";
 defineProps(["title", "subtitle"]);
+const emit = defineEmits(["reset"]);
 </script>
 
 <template>
@@ -21,7 +22,7 @@ defineProps(["title", "subtitle"]);
         ></v-btn>
         <v-btn
             text="Yes"
-            @click="$emit('reset'); isActive.value = false"
+            @click="emit('reset'); isActive.value = false"
         ></v-btn>
       </v-card-actions>
     </template>

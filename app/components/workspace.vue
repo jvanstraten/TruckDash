@@ -402,6 +402,7 @@ const gestures = useGestureDetection(onGesture);
     >
       <display
           :address="configuration.layoutDisplay1Address"
+          :zoom="configuration.layoutDisplay1Zoom"
           :configuration="configuration"
           :gameState="gameState"
           :shading="shading"
@@ -415,6 +416,7 @@ const gestures = useGestureDetection(onGesture);
     >
       <display
           :address="configuration.layoutDisplay2Address"
+          :zoom="configuration.layoutDisplay2Zoom"
           :configuration="configuration"
           :gameState="gameState"
           :shading="shading"
