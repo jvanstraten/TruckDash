@@ -1,8 +1,45 @@
 import { Color } from "color-core";
 import SunCalc from "~/lib/suncalc";
-import type { Configuration, GameState } from "~/types/globals";
-import type { Instruments } from "~/types/instruments";
-import type { AllStyles, Shading } from "~/types/shading";
+import type { Configuration } from "~/composables/configuration";
+import type { GameState } from "~/composables/game";
+import type { Instruments } from "~/composables/instruments";
+
+export type IndicatorStyles = {
+    on: any,
+    off: any,
+};
+
+export type AllStyles = {
+    diffuse: any,
+    emission: any,
+    combined: any,
+    needle: any,
+    indicator: IndicatorStyles,
+    divIndicator: IndicatorStyles,
+};
+
+export type Shading = {
+    background: string,
+    lowerBackground: string,
+    primary: AllStyles,
+    secondary: AllStyles,
+    display: AllStyles,
+    needle: AllStyles,
+    indicator: {
+        red: IndicatorStyles,
+        amber: IndicatorStyles,
+        green: IndicatorStyles,
+        blue: IndicatorStyles,
+        display: IndicatorStyles,
+    }
+    divIndicator: {
+        red: IndicatorStyles,
+        amber: IndicatorStyles,
+        green: IndicatorStyles,
+        blue: IndicatorStyles,
+        display: IndicatorStyles,
+    }
+};
 
 export function useShading(gameState: GameState, instruments: Instruments, configuration: Configuration): {shading: ComputedRef<Shading>} {
 

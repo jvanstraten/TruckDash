@@ -1,79 +1,96 @@
-import { onUnmounted, reactive, watch } from "vue";
+import { onMounted, onUnmounted, reactive, watch } from "vue";
 import { TruckTelSocket } from "~/lib/trucktel";
-import type { Configuration, ConfigurationData, GameState } from "~/types/globals";
-import { useStorage } from "@vueuse/core";
 
-// Default configuration + configuration structure.
-export const configDefaults: ConfigurationData = {
-
-    // Preferences.
-    prefSelfTest: true,
-    prefSelfTestNeedle: true,
-    prefClock12: false,
-    prefClockOffset: 0,
-    prefGearDisplayMode: "gear",
-    prefCruiseDisplayMode: "normal",
-    prefSpeedUnit: "kmh",
-    prefShading: true,
-    prefTimezones: true,
-    prefDisplayStartup: true,
-    prefDisplayFollowsTruck: true,
-    prefDisplayStandby: true,
-    prefFuelFollowsAdBlue: true,
-    prefFlashOverspeed: true,
-    prefFlashRestIndicator: false,
-
-    // Settings that trade graphical fidelity for rendering speed.
-    perfTelemetryThrottle: 30,
-    perfAnimationThrottle: 14,
-    perfAnimateNeedles: true,
-    perfNeedleDetails: true,
-    perfAnimateIndicators: false,
-    perfBloom: false,
-    perfShadows: true,
-
-    // Theme and rendering configuration.
-    themeWorkspace: '#000',
-    themeWorkspaceFollowsBackground: true,
-    themeBackground: '#444',
-    themePrimary: '#DDD',
-    themeSecondary: '#F98',
-    themeBacklight: '#CFA',
-    themeDisplay: '#DDD',
-    themeIndicatorRed: '#F10',
-    themeIndicatorAmber: '#FA0',
-    themeIndicatorGreen: '#0F6',
-    themeIndicatorBlue: '#36F',
-    themeSegments: '#0000000C',
-    themeNeedle: '#C43',
-    themeNeedleBacklight: '#FFF',
-    themeNeedleStroke: '#0006',
-
-    // Layout configuration.
-    layoutInstrumentsEnabled: true,
-    layoutInstrumentsPosition: { x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0 },
-    layoutDisplay1Address: "",
-    layoutDisplay1Position: { x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0 },
-    layoutDisplay1Zoom: 0,
-    layoutDisplay2Address: "",
-    layoutDisplay2Position: { x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0 },
-    layoutDisplay2Zoom: 0,
-
-    // Stalk configuration.
-    stalkGestureMode: "bothStalks",
-    stalkGestureSwitches: "outer",
-    stalkHoldForMenu: false,
-    stalkSwap: "lhd",
-    stalkInvertLowBeam: false,
-    stalkInvertHighBeam: false,
-    stalkInvertWipers: false,
-    stalkInvertTransPaddle: false,
-    stalkInvertTransBrake: false,
-    stalkInvertTransMode: false,
-    stalkInvertTransDirection: false,
-    stalkSwapPaddleBrake: false,
-    stalkSwapModeDirection: false,
-
+export type GameState = {
+    current: {
+        paused: null | boolean,
+    },
+    unpaused: {
+        time: {
+            current: null | number,
+            restRemain: null | number,
+            navRemain: null | number,
+            jobExpected: null | number,
+        },
+        location: {
+            lat: null | number,
+            lon: null | number,
+        },
+        electric: {
+            enabled: null | boolean,
+            indicator: null | boolean,
+        },
+        engine: {
+            running: null | boolean,
+            rpm: null | number,
+            rpmLimit: null | number,
+            wear: null | number,
+        },
+        transmission: {
+            mode: null | "arcade" | "automatic" | "manual" | "hshifter",
+            realGear: null | number,
+            indicatedGear: null | number,
+            diffLock: null | boolean,
+            wear: null | number,
+        },
+        axles: {
+            liftTruck: null | boolean,
+            liftTrailer: null | boolean,
+            speed: null | number,
+            odo: null | number,
+        },
+        brake: {
+            parking: null | boolean,
+            motor: null | boolean,
+            retarder: null | number,
+            retarderMax: null | number,
+        },
+        fuel: {
+            amount: null | number,
+            capacity: null | number,
+            consumption: null | number,
+            indicator: null | boolean,
+        },
+        adBlue: {
+            amount: null | number,
+            capacity: null | number,
+            indicator: null | boolean,
+        },
+        oil: {
+            pressure: null | number,
+            indicator: null | boolean,
+        },
+        coolant: {
+            temperature: null | number,
+            indicator: null | boolean,
+        },
+        air: {
+            pressure: null | number,
+            indicator: null | boolean,
+        },
+        lights: {
+            parking: null | boolean,
+            low: null | boolean,
+            high: null | boolean,
+            beacon: null | boolean,
+            turnLeft: null | boolean,
+            turnRight: null | boolean,
+            turnSwLeft: null | boolean,
+            turnSwRight: null | boolean,
+            turnSwSteer: null | number,
+            hazardSw: null | boolean,
+            dash: null | boolean,
+        },
+        util: {
+            wipers: null | number,
+            cruiseControl: null | number,
+            speedLimit: null | number,
+        },
+    },
+    derived: {
+        transMode: ComputedRef<"M" | "A">,
+        transDirection: ComputedRef<"R" | "N" | "D">,
+    },
 };
 
 // Game state. This is a global/singleton because it's updated by the socket,
@@ -192,15 +209,7 @@ gameSocket.dev_host = "localhost:8080";
 gameSocket.debug = true;
 
 // Register usage.
-export function useGlobals(): { configuration: Configuration, gameState: GameState, gameSocket: TruckTelSocket } {
-
-    // Load configuration.
-    const configuration = useStorage(
-        "config",
-        configDefaults,
-        localStorage,
-        {mergeDefaults: true}
-    );
+export function useGame(configuration: Configuration): { gameState: GameState, gameSocket: TruckTelSocket } {
 
     // Open/close the socket on mount/unmount.
     onMounted(() => {
@@ -216,5 +225,5 @@ export function useGlobals(): { configuration: Configuration, gameState: GameSta
         gameSocket.reopen();
     }, { immediate: true });
 
-    return { configuration, gameState, gameSocket };
+    return { gameState, gameSocket };
 }

@@ -1,9 +1,64 @@
 import { ref, computed } from "vue";
 import { design } from "~/data/design";
 import { useAnimation } from "~/composables/animation";
-import type { Configuration, GameState } from "~/types/globals";
-import type { Instruments } from "~/types/instruments";
+import type { Configuration } from "~/composables/configuration";
 import type { NeedleConfig } from "~/types/design";
+
+export type Instruments = {
+    backlight: globalThis.ComputedRef<number>,
+    displays: {
+        brightness: globalThis.ComputedRef<number>,
+        clock: globalThis.ComputedRef<string>,
+        deadline: globalThis.ComputedRef<string>,
+        eta: globalThis.ComputedRef<string>,
+        rest: globalThis.ComputedRef<string>,
+        odometer: globalThis.ComputedRef<string>,
+        gearCruiseL: globalThis.ComputedRef<string>,
+        gearCruiseR: globalThis.ComputedRef<string>,
+        cruiseControl: globalThis.ComputedRef<string>,
+        retarder: globalThis.ComputedRef<string>,
+    },
+    indicators: {
+        brightness: globalThis.ComputedRef<number>,
+        adBlue: globalThis.ComputedRef<boolean>,
+        air: globalThis.ComputedRef<boolean>,
+        airbag: globalThis.ComputedRef<boolean>,
+        axleLift: globalThis.ComputedRef<boolean>,
+        battery: globalThis.ComputedRef<boolean>,
+        beacon: globalThis.ComputedRef<boolean>,
+        coolant: globalThis.ComputedRef<boolean>,
+        cruiseControl: globalThis.ComputedRef<boolean>,
+        diffLock: globalThis.ComputedRef<boolean>,
+        engine: globalThis.ComputedRef<boolean>,
+        fuel: globalThis.ComputedRef<boolean>,
+        gameDisconnected: globalThis.ComputedRef<boolean>,
+        gamePaused: globalThis.ComputedRef<boolean>,
+        highBeam: globalThis.ComputedRef<boolean>,
+        lowBeam: globalThis.ComputedRef<boolean>,
+        oil: globalThis.ComputedRef<boolean>,
+        parkingBrake: globalThis.ComputedRef<boolean>,
+        parkingLights: globalThis.ComputedRef<boolean>,
+        powerSteering: globalThis.ComputedRef<boolean>,
+        retarder: globalThis.ComputedRef<boolean>,
+        speeding: globalThis.ComputedRef<boolean>,
+        transmission: globalThis.ComputedRef<boolean>,
+        turnLeft: globalThis.ComputedRef<boolean>,
+        turnRight: globalThis.ComputedRef<boolean>,
+        clockAm: Ref<boolean>,
+        clockPm: Ref<boolean>,
+        transAuto: globalThis.ComputedRef<boolean>,
+        transManual: globalThis.ComputedRef<boolean>,
+    },
+    needles: {
+        air: Ref<number>,
+        coolant: Ref<number>,
+        fuel: Ref<number>,
+        oil: Ref<number>,
+        speed: Ref<number>,
+        rpm: Ref<number>,
+        consumption: Ref<number>,
+    }
+};
 
 export function useInstruments(gameState: GameState, configuration: Configuration): { instruments: Instruments } {
 

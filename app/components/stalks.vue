@@ -1,6 +1,6 @@
 <script setup lang="ts">
 
-import { useGlobals } from "~/composables/globals";
+import { useGlobals } from "~/composables/game";
 import { useInstruments } from "~/composables/instruments";
 import { useShading } from "~/composables/shading";
 import { design } from "~/data/design";

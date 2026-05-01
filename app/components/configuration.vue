@@ -1,120 +1,33 @@
 <script setup lang="ts">
 
-import {configDefaults, useGlobals} from "~/composables/globals";
 import configItem from "~/components/configItem.vue";
 import configDialog from "~/components/configDialog.vue";
 import configBool from "~/components/configBool.vue";
 import configRadio from "~/components/configRadio.vue";
 import configColor from "~/components/configColor.vue";
 import configDisplay from "~/components/configDisplay.vue";
-import type { UiPosition, ConfigurationData } from "~/types/globals";
-const { configuration } = useGlobals();
+
+import { useConfiguration } from "~/composables/configuration";
+import { useStalkConfiguration } from "~/composables/stalkConfiguration";
+import { useGestureControls } from "~/composables/gestureControls";
+
+const {
+  configuration,
+  defaultLayouts,
+  loadLayout,
+  loadDefaults,
+  loadFromFile,
+  saveToFile
+} = useConfiguration();
+
+const stalkConfiguration = useStalkConfiguration(configuration);
+const { gestureMapping } = useGestureControls(configuration, stalkConfiguration);
+
 
 const emit = defineEmits(["adjust", "mapping"]);
 
 const tab = ref('general');
 const chosenFile = ref();
-
-type DefaultLayoutData = {
-  title: string,
-  subtitle: string,
-  instrumentsPosition?: UiPosition;
-  display1Position?: UiPosition;
-  display2Position?: UiPosition;
-};
-
-const defaultLayouts: DefaultLayoutData[] = [
-  {
-    title: "Instruments",
-    subtitle: "Loads the default layout, with just the instrument cluster.",
-    instrumentsPosition: { x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0,},
-  },
-];
-
-function loadLayout(layout: DefaultLayoutData) {
-  configuration.value.layoutInstrumentsEnabled = layout.instrumentsPosition !== undefined;
-  Object.assign(configuration.value.layoutInstrumentsPosition, layout.instrumentsPosition);
-  configuration.value.layoutDisplay1Address = "";
-  configuration.value.layoutDisplay2Address = "";
-}
-
-function resetAll() {
-  Object.keys(configDefaults).forEach(key => {
-    (configuration.value as any)[key] = (configDefaults as any)[key];
-  });
-}
-
-function resetTheme() {
-  Object.keys(configDefaults).forEach(key => {
-    if (key.startsWith("theme")) {
-      (configuration.value as any)[key] = (configDefaults as any)[key];
-    }
-  });
-}
-
-function resetStalk() {
-  Object.keys(configDefaults).forEach(key => {
-    if (key.startsWith("stalk")) {
-      (configuration.value as any)[key] = (configDefaults as any)[key];
-    }
-  });
-}
-
-function saveFile() {
-  const json = JSON.stringify(configuration.value);
-  const blob = new Blob([json], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = "truckdash.json";
-  a.style.display = 'none';
-  document.body.append(a);
-  a.click();
-  setTimeout(() => {
-    URL.revokeObjectURL(url);
-    a.remove();
-  }, 1000);
-}
-
-function restoreFile() {
-  if (!chosenFile.value) {
-    alert("Error restoring configuration: no file chosen.");
-    return;
-  }
-  const reader = new FileReader();
-  reader.readAsText(chosenFile.value);
-  reader.onload = () => {
-    try {
-      const data = reader.result;
-      if (typeof data != "string") {
-        alert("Error restoring configuration: not a text file.");
-        return;
-      }
-      const parsed = JSON.parse(data);
-      let restored = 0;
-      let total = 0;
-      Object.keys(configDefaults).forEach(key => {
-        if (key in parsed) {
-          (configuration.value as any)[key] = parsed[key];
-          restored++;
-        } else {
-          (configuration.value as any)[key] = (configDefaults as any)[key];
-        }
-        total++;
-      });
-      if (restored != total) {
-        alert(`Warning: Restored only ${restored} of ${total} configuration keys from file.`);
-      }
-    } catch (e) {
-      alert(`Error restoring configuration: ${e}.`);
-    }
-  }
-  reader.onerror = (e) => {
-    alert(`Error restoring configuration: ${e}.`);
-    return;
-  }
-}
 
 </script>
 
@@ -149,11 +62,81 @@ function restoreFile() {
             v-model="configuration.prefTimezones"
         />
 
-        <v-list-subheader>Save/restore</v-list-subheader>
+        <v-list-subheader>Speed display (digital only)</v-list-subheader>
+        <configRadio
+            title="Kilometers per hour"
+            subtitle="The digital speed displays show speed in kilometers per hour."
+            v-model="configuration.prefSpeedUnit"
+            value="kmh"
+        />
+        <configRadio
+            title="Miles per hour"
+            subtitle="The digital speed displays show speed in miles per hour."
+            v-model="configuration.prefSpeedUnit"
+            value="mph"
+        />
+
+        <v-list-subheader>Time display</v-list-subheader>
+        <configRadio
+            title="24-hour"
+            subtitle="The clock shows 24-hour time (aka military time)."
+            v-model="configuration.prefClock12"
+            :value="false"
+        />
+        <configRadio
+            title="12-hour am/pm"
+            subtitle="The clock shows 12-hour time with am/pm notation."
+            v-model="configuration.prefClock12"
+            :value="true"
+        />
+
+        <v-list-subheader>More</v-list-subheader>
+        <configItem
+            title="Layout"
+            subtitle="Configure which layout elements are present on your screen and where."
+            @activate="tab = 'layout'"
+        >
+          <template v-slot:prepend><v-icon>mdi-page-layout-header-footer</v-icon></template>
+          <template v-slot:append><v-icon>mdi-dots-horizontal</v-icon></template>
+        </configItem>
+        <configItem
+            title="Control stalks &amp; gestures"
+            subtitle="Use TruckDash to control your truck with swipe gestures! Real vehicles have control stalks, but unless you have a full sim setup, you probably don't for the game. TruckDash tries to emulate control stalks using swipe gesture controls."
+            @activate="tab = 'stalks'"
+        >
+          <template v-slot:prepend><v-icon>mdi-gamepad</v-icon></template>
+          <template v-slot:append><v-icon>mdi-dots-horizontal</v-icon></template>
+        </configItem>
+        <configItem
+            title="Instrument behavior"
+            subtitle="Configure the behavior of the instrument cluster to your liking."
+            @activate="tab = 'instruments'"
+        >
+          <template v-slot:prepend><v-icon>mdi-gauge</v-icon></template>
+          <template v-slot:append><v-icon>mdi-dots-horizontal</v-icon></template>
+        </configItem>
+        <configItem
+            title="Performance settings"
+            subtitle="Issues with stuttering on (old) mobile devices? Reduce update rates and expensive-ish visuals here."
+            @activate="tab = 'performance'"
+        >
+          <template v-slot:prepend><v-icon>mdi-fast-forward</v-icon></template>
+          <template v-slot:append><v-icon>mdi-dots-horizontal</v-icon></template>
+        </configItem>
+        <configItem
+            title="Theme"
+            subtitle="Don't like the default colors? Change them here."
+            @activate="tab = 'theme'"
+        >
+          <template v-slot:prepend><v-icon>mdi-palette-outline</v-icon></template>
+          <template v-slot:append><v-icon>mdi-dots-horizontal</v-icon></template>
+        </configItem>
+
+        <v-list-subheader>Save/restore configuration</v-list-subheader>
         <configItem
             title="Save to file"
             subtitle="Save this device's configuration to a file."
-            @activate="saveFile"
+            @activate="saveToFile"
         >
           <template v-slot:prepend>
             <v-icon>mdi-file-download-outline</v-icon>
@@ -184,7 +167,7 @@ function restoreFile() {
               ></v-btn>
               <v-btn
                   text="Restore from file"
-                  @click="isActive.value = false; restoreFile();"
+                  @click="isActive.value = false; loadFromFile(chosenFile.value);"
               ></v-btn>
             </v-card-actions>
           </template>
@@ -192,7 +175,7 @@ function restoreFile() {
         <configReset
             title="Restore defaults"
             subtitle="Restore this device's configuration from defaults."
-            @reset="resetAll"
+            @reset="loadDefaults()"
         />
 
       </v-list>
@@ -243,7 +226,13 @@ function restoreFile() {
 
     <v-tabs-window-item value="stalks">
       <v-list lines="one" select-strategy="leaf">
-        <v-list-item disabled>Control stalks</v-list-item>
+        <v-list-item disabled>Control stalks &amp; gestures</v-list-item>
+
+        <v-list-subheader>Preview</v-list-subheader>
+        <gestureInputMap
+            :gestureMapping="gestureMapping"
+            style="height: auto; aspect-ratio: 2.8; position: relative"
+        />
 
         <v-list-subheader>Gesture control</v-list-subheader>
         <configRadio
@@ -271,7 +260,7 @@ function restoreFile() {
             value="disabled"
         />
 
-        <v-list-subheader>Gesture zones (per stalk)</v-list-subheader>
+        <v-list-subheader>Gesture zones per stalk</v-list-subheader>
         <configRadio
             title="Two zones, outer controls switches"
             subtitle="The swipe zone for each stalk is vertically divided in two. The outer half controls the switches on the stalk, while the inner half moves the stalk itself."
@@ -287,8 +276,8 @@ function restoreFile() {
             value="inner"
         />
         <configRadio
-            title="Tap first for switches"
-            subtitle="The swipe zone for each stalk is vertically divided in two. The inner half controls the switches on the stalk, while the outer half moves the stalk itself."
+            title="Single zone, tap first for switches"
+            subtitle="Swipe actions normally control stalk movement. To control the switches, use a tap-swipe combo. You can swipe as often as you like after tapping; the control layer reverts back on a timer. You can also tap again to revert manually."
             :enabled="configuration.stalkGestureMode != 'disabled'"
             v-model="configuration.stalkGestureSwitches"
             value="click"
@@ -373,10 +362,10 @@ function restoreFile() {
             v-model="configuration.stalkInvertTransMode"
         />
 
-        <v-list-subheader>Help!</v-list-subheader>
+        <v-list-subheader>Test or reset</v-list-subheader>
         <configItem
             title="Test input mapping"
-            subtitle="Show how gestures are currently mapped."
+            subtitle="Try out the gesture controls without the game."
             @activate="emit('mapping')"
         >
           <template v-slot:prepend>
@@ -386,7 +375,7 @@ function restoreFile() {
         <configReset
             title="Load default stalk settings"
             subtitle="Click to load default settings for this page."
-            @reset="resetStalk"
+            @reset="loadDefaults('stalk')"
         />
 
       </v-list>
@@ -444,21 +433,7 @@ function restoreFile() {
             value="speedAlways"
         />
 
-        <v-list-subheader>Digital speed units</v-list-subheader>
-        <configRadio
-            title="Kilometers per hour"
-            subtitle="The digital speed displays show speed in kilometers per hour."
-            v-model="configuration.prefSpeedUnit"
-            value="kmh"
-        />
-        <configRadio
-            title="Miles per hour"
-            subtitle="The digital speed displays show speed in miles per hour."
-            v-model="configuration.prefSpeedUnit"
-            value="mph"
-        />
-
-        <v-list-subheader>Clock</v-list-subheader>
+        <v-list-subheader>Clock timezone offset</v-list-subheader>
         <configRadio
             title="No offset"
             subtitle="The clock shows the game's internal/default timezone."
@@ -488,11 +463,6 @@ function restoreFile() {
             subtitle="Subtracts two hours from the indicated time."
             v-model="configuration.prefClockOffset"
             :value="-2"
-        />
-        <configBool
-            title="12-hour clock"
-            subtitle="The clock shows 12-hour time."
-            v-model="configuration.prefClock12"
         />
 
         <v-list-subheader>Startup behavior &amp; power</v-list-subheader>
@@ -738,7 +708,7 @@ function restoreFile() {
         <configReset
             title="Load default theme"
             subtitle="Click to load default theme data."
-            @reset="resetTheme"
+            @reset="loadDefaults('theme')"
         />
 
       </v-list>
