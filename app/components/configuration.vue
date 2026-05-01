@@ -392,136 +392,243 @@ function restoreFile() {
       <v-list lines="one" active-strategy="leaf" activatable>
         <v-list-item disabled>Instrument behavior</v-list-item>
 
-        <v-list-subheader>Startup</v-list-subheader>
+        <v-list-subheader>Gear display</v-list-subheader>
+        <configRadio
+            title="Normal"
+            subtitle='The gear display shows the "indicated gear" from game telemetry.'
+            v-model="configuration.prefGearDisplayMode"
+            value="gear"
+        />
+        <configRadio
+            title='"Real" gear'
+            subtitle="The gear display shows the &quot;real gear&quot; from game telemetry. This appears to be the gear that's actually used by the game's gearbox simulation. It shows N when the truck is not moving (regardless of R/N/D state) and might differ from the indicated gear when your transmission is messed up."
+            v-model="configuration.prefGearDisplayMode"
+            value="realGear"
+        />
+        <configRadio
+            title="Speed"
+            subtitle="The gear display is used to show speed digitally instead."
+            v-model="configuration.prefGearDisplayMode"
+            :enabled="configuration.prefCruiseDisplayMode != 'speedAlways'"
+            value="speed"
+        />
+
+        <v-list-subheader>Cruise control display</v-list-subheader>
+        <configRadio
+            title="Normal"
+            subtitle="The cruise control speed display turns off when cruise control is not enabled."
+            v-model="configuration.prefCruiseDisplayMode"
+            value="normal"
+        />
+        <configRadio
+            title="Remember speed"
+            subtitle="When you or the game turns off cruise control, indicate the last known cruise control speed, which is probably what the &quot;resume&quot; binding will revert the speed to. The game doesn't report the resume speed via telemetry, so this information might be wrong."
+            v-model="configuration.prefCruiseDisplayMode"
+            value="retain"
+        />
+        <configRadio
+            title="Show actual speed when disabled"
+            subtitle="When cruise control is not on, the display shows the actual speed digitally."
+            v-model="configuration.prefCruiseDisplayMode"
+            value="speedWhenDisabled"
+        />
+        <configRadio
+            title="Always show actual speed"
+            subtitle="The display is used to show the actual speed digitally, regardless of the cruise control state."
+            v-model="configuration.prefCruiseDisplayMode"
+            :enabled="configuration.prefGearDisplayMode != 'speed'"
+            value="speedAlways"
+        />
+
+        <v-list-subheader>Digital speed units</v-list-subheader>
+        <configRadio
+            title="Kilometers per hour"
+            subtitle="The digital speed displays show speed in kilometers per hour."
+            v-model="configuration.prefSpeedUnit"
+            value="kmh"
+        />
+        <configRadio
+            title="Miles per hour"
+            subtitle="The digital speed displays show speed in miles per hour."
+            v-model="configuration.prefSpeedUnit"
+            value="mph"
+        />
+
+        <v-list-subheader>Clock</v-list-subheader>
+        <configRadio
+            title="No offset"
+            subtitle="The clock shows the game's internal/default timezone."
+            v-model="configuration.prefClockOffset"
+            :value="0"
+        />
+        <configRadio
+            title="+1 hour"
+            subtitle="Adds one hour to the indicated time."
+            v-model="configuration.prefClockOffset"
+            :value="+1"
+        />
+        <configRadio
+            title="+2 hours"
+            subtitle="Adds two hours to the indicated time."
+            v-model="configuration.prefClockOffset"
+            :value="+2"
+        />
+        <configRadio
+            title="-1 hour"
+            subtitle="Subtracts one hour from the indicated time."
+            v-model="configuration.prefClockOffset"
+            :value="-1"
+        />
+        <configRadio
+            title="-2 hours"
+            subtitle="Subtracts two hours from the indicated time."
+            v-model="configuration.prefClockOffset"
+            :value="-2"
+        />
+        <configBool
+            title="12-hour clock"
+            subtitle="The clock shows 12-hour time."
+            v-model="configuration.prefClock12"
+        />
+
+        <v-list-subheader>Startup behavior &amp; power</v-list-subheader>
         <configBool
             title="Indicator self-test"
             subtitle="Simulate a self-test of the indicators when you power up your truck. If disabled, all indicators follow game telemetry data immediately."
             v-model="configuration.prefSelfTest"
         />
         <configBool
-            title="Embedded app display startup"
+            title="Gauge self-test"
+            subtitle="Simulate self-test/homing of the gauges when you power up your truck. If disabled, the gauges follow game telemetry data immediately."
+            v-model="configuration.prefSelfTestNeedle"
+        />
+        <configBool
+            title="App display startup"
             subtitle="Simulates slow-ish start-up of an operating system running on the display."
             :enabled="configuration.layoutDisplay1Address != '' || configuration.layoutDisplay2Address != ''"
             v-model="configuration.prefDisplayStartup"
         />
-
-        <v-list-subheader>Gear/cruise display</v-list-subheader>
-        <configRadio
-            title="Mixed (km/h)"
-            subtitle="When cruise control is enabled, the gear/cruise display shows the cruise control speed in km/h. Otherwise, it shows the current gear."
-            v-model="configuration.prefGearCruiseMode"
-            value="mixed-kmh"
-        />
-        <configRadio
-            title="Mixed (mph)"
-            subtitle="When cruise control is enabled, the gear/cruise display shows the cruise control speed in mph. Otherwise, it shows the current gear."
-            v-model="configuration.prefGearCruiseMode"
-            value="mixed-mph"
-        />
-        <configRadio
-            title="Gear"
-            subtitle="The gear/cruise display always shows the current gear."
-            v-model="configuration.prefGearCruiseMode"
-            value="gear"
-        />
-        <configRadio
-            title="Speed (km/h)"
-            subtitle="Instead of gear or cruise control speed, the gear/cruise display shows the current speed in km/h."
-            v-model="configuration.prefGearCruiseMode"
-            value="speed-kmh"
-        />
-        <configRadio
-            title="Speed (mph)"
-            subtitle="Instead of gear or cruise control speed, the gear/cruise display shows the current speed in mph."
-            v-model="configuration.prefGearCruiseMode"
-            value="speed-mph"
-        />
-
-        <v-list-subheader>Clock</v-list-subheader>
         <configBool
-            title="12-hour clock"
-            subtitle="The clock shows 12-hour time. Note that am/pm cannot be shown."
-            v-model="configuration.prefClock12"
-        />
-        <!-- TODO: timezone offset selection -->
-
-        <v-list-subheader>Embedded app display power</v-list-subheader>
-        <configBool
-            title="Auto power-up/power-down"
+            title="App display auto power"
             subtitle="Displays turn on and off automatically when you power your truck on and off. You can always override."
             :enabled="configuration.layoutDisplay1Address != '' || configuration.layoutDisplay2Address != ''"
             v-model="configuration.prefDisplayFollowsTruck"
         />
         <configBool
-            title="Auto power-down does not refresh"
+            title="App display refresh inhibit"
             subtitle="Note that manual power-cycling of a display always reloads the embedded web page."
             :enabled="(configuration.layoutDisplay1Address != '' || configuration.layoutDisplay2Address != '') && configuration.prefDisplayFollowsTruck"
             v-model="configuration.prefDisplayStandby"
         />
 
-        <!--<v-list-subheader>Miscellaneous</v-list-subheader>-->
-        <!-- TODO: fuel gauge follows adblue -->
-        <!-- TODO: flash speeding indicator -->
+        <v-list-subheader>Miscellaneous</v-list-subheader>
+        <configBool
+            title="Clamp fuel gauge to AdBlue"
+            subtitle="When selected and the AdBlue aka exhaust fluid level is lower than the fuel level, the fuel gauge shows the AdBlue level instead of the fuel level."
+            v-model="configuration.prefDisplayStandby"
+        />
+        <configBool
+            title="Flash overspeed indicator"
+            subtitle="When selected, the overspeed indicator will flash instead of being on continuously when you're speeding by a lot."
+            v-model="configuration.prefFlashOverspeed"
+        />
+        <configBool
+            title="Flash rest time indicator"
+            subtitle="When selected, the rest time indicator will flash when it reaches zero. If you don't have rest time simulation on in the game, the game will always report zero, so you'll definitely want to disable this then."
+            v-model="configuration.prefFlashRestIndicator"
+        />
 
       </v-list>
   </v-tabs-window-item>
 
     <v-tabs-window-item value="performance">
       <v-list lines="one" select-strategy="leaf">
-        <v-list-item disabled>Performance setting</v-list-item>
+        <v-list-item disabled>Performance settings</v-list-item>
 
         <v-list-subheader>Telemetry update rate</v-list-subheader>
         <configRadio
             title="No limit"
             subtitle="The game sends telemetry for every frame it renders."
             v-model="configuration.perfTelemetryThrottle"
-            value="0"
+            :value="0"
         />
         <configRadio
-            title="60fps"
-            subtitle="Telemetry updates are sent at most every 16ms."
+            title="60 fps"
+            subtitle="Telemetry updates are sent at most every 14ms (value is rounded down to reduce stuttering)."
             v-model="configuration.perfTelemetryThrottle"
-            value="16"
+            :value="14"
         />
         <configRadio
-            title="30fps"
-            subtitle="Telemetry updates are sent at most every 33ms."
+            title="30 fps"
+            subtitle="Telemetry updates are sent at most every 30ms (value is rounded down to reduce stuttering)."
             v-model="configuration.perfTelemetryThrottle"
-            value="33"
+            :value="30"
         />
         <configRadio
-            title="10fps"
+            title="20 fps"
+            subtitle="Telemetry updates are sent at most every 45ms (value is rounded down to reduce stuttering)."
+            v-model="configuration.perfTelemetryThrottle"
+            :value="45"
+        />
+        <configRadio
+            title="10 fps"
             subtitle="Telemetry updates are sent at most every 100ms."
             v-model="configuration.perfTelemetryThrottle"
-            value="100"
+            :value="100"
         />
         <configRadio
-            title="5fps"
+            title="5 fps"
             subtitle="Telemetry updates are sent at most every 200ms."
             v-model="configuration.perfTelemetryThrottle"
-            value="200"
+            :value="200"
         />
         <configRadio
-            title="2fps"
+            title="2 fps"
             subtitle="Telemetry updates are sent at most every 500ms."
             v-model="configuration.perfTelemetryThrottle"
-            value="500"
+            :value="500"
+        />
+
+        <v-list-subheader>Javascript animations</v-list-subheader>
+        <configRadio
+            title="No limit"
+            subtitle="Javascript animations update for every browser animation frame. That's usually 60 FPS."
+            v-model="configuration.perfAnimationThrottle"
+            :value="0"
+        />
+        <configRadio
+            title="60 fps"
+            subtitle="Javascript animations update at most every 14ms (value is rounded down to reduce stuttering)."
+            v-model="configuration.perfAnimationThrottle"
+            :value="14"
+        />
+        <configRadio
+            title="30 fps"
+            subtitle="Javascript animations update at most every 30ms (value is rounded down to reduce stuttering)."
+            v-model="configuration.perfAnimationThrottle"
+            :value="30"
+        />
+        <configRadio
+            title="20 fps"
+            subtitle="Telemetry updates are sent at most every 45ms (value is rounded down to reduce stuttering)."
+            v-model="configuration.perfAnimationThrottle"
+            :value="45"
         />
 
         <v-list-subheader>Effects</v-list-subheader>
         <configBool
             title="Needle animations"
-            subtitle="Whether needle movement is smoothed out."
+            subtitle="Whether needle movement is smoothed out. This is done via Javascript, so it's throttled by the animation speed controls above."
             v-model="configuration.perfAnimateNeedles"
         />
         <configBool
             title="Needle details"
-            subtitle="Whether to add some extra visual details to the needles, to make them not look as flat."
+            subtitle="Whether to add some extra visual details to the needles, to make them not look so bland."
             v-model="configuration.perfNeedleDetails"
         />
         <configBool
             title="Indicator animations"
-            subtitle="Whether to fade indicators in and out. Gives a lightbulb-like effect."
+            subtitle="Whether to fade indicators in and out. Gives a lightbulb-like effect. This is done via CSS, and is therefore always done at the browser's framerate."
             v-model="configuration.perfAnimateIndicators"
         />
         <configBool

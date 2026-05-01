@@ -1,24 +1,34 @@
 import { ref, computed } from "vue";
 import { design } from "~/data/design";
-import type { Configuration } from "~/types/globals";
+import { useAnimation } from "~/composables/animation";
+import type { Configuration, GameState } from "~/types/globals";
 import type { Instruments } from "~/types/instruments";
 import type { NeedleConfig } from "~/types/design";
 
-export function useInstruments(gameState: any, configuration: Configuration): { instruments: Instruments } {
+export function useInstruments(gameState: GameState, configuration: Configuration): { instruments: Instruments } {
 
     const mpsToKmh = 3.6;
     const mpsToMph = 2.236936;
     const psiToBar = 0.06894757;
 
     function remainingTimeDisplay(remain: number): string {
-        remain = Math.max(0, remain);
+        const negative = remain < 0;
+        remain = Math.abs(remain);
         remain = Math.floor(remain);
         let min = remain % 60;
         remain = Math.floor(remain / 60);
         let hrs = remain;
-        if (hrs > 199) {
-            hrs = 199;
-            min = 59;
+        if (!negative) {
+            if (hrs > 199) {
+                hrs = 199;
+                min = 59;
+            }
+        } else {
+            if (hrs > 9) {
+                hrs = 9;
+                min = 59;
+            }
+            hrs = -hrs;
         }
         let hrsf = hrs.toString().padStart(3, "!");
         let minf = min.toString().padStart(2, "0");
@@ -90,32 +100,27 @@ export function useInstruments(gameState: any, configuration: Configuration): { 
     }
 
     const gearCruise = computed(() => {
-        const mixed = configuration.value.prefGearCruiseMode.startsWith("mixed-");
-        const speed = configuration.value.prefGearCruiseMode.startsWith("speed-");
-        const mph = configuration.value.prefGearCruiseMode.endsWith("-mph");
-        const factor = (mph ? mpsToMph : mpsToKmh);
-
-        if (speed) {
+        const config = configuration.value;
+        if (config.prefGearDisplayMode == "speed") {
             let speed = gameState.unpaused.axles.speed;
             if (typeof speed != "number") return "!!";
+            const factor = config.prefSpeedUnit == "mph" ? mpsToMph : mpsToKmh;
             const value = Math.min(Math.round(Math.abs(speed) * factor / 100), 99);
             return value.toString().padStart(2, "!");
         }
-        if (mixed) {
-            let cc = gameState.unpaused.util.cruiseControl;
-            if (typeof cc == "number" && cc > 0) {
-                const value = Math.min(Math.round(cc * factor), 99);
-                return value.toString().padStart(2, "!");
-            }
+        let gear;
+        if (config.prefGearDisplayMode == "realGear") {
+            gear = gameState.unpaused.transmission.realGear;
+        } else {
+            gear = gameState.unpaused.transmission.indicatedGear;
         }
-        let gear = gameState.unpaused.transmission.indicatedGear;
         if (typeof gear != "number") return "!!";
         if (gear < 0) return "R" + Math.min(-gear, 9).toString();
         if (gear == 0) return "N!";
         return Math.min(gear, 99).toString().padStart(2, "!");
     });
 
-    function computeSpeedingLevel() {
+    function computeSpeedingSeverity() {
         let speed = gameState.unpaused.axles.speed;
         if (typeof speed != "number") return 0;
         speed /= 100; // scale in config.yaml
@@ -126,9 +131,16 @@ export function useInstruments(gameState: any, configuration: Configuration): { 
         return 0;
     }
 
-    const speeding = ref(false);
+    let lastFuelConsumption: number = 0;
+    let lastCruiseControl: number | null = null;
 
-    let lastFuelConsumption = 0;
+    const blink = ref(false);
+
+    watch(gameState.unpaused, () => {
+        if (gameState.unpaused.electric.enabled !== true) {
+            lastCruiseControl = null;
+        }
+    });
 
     const systemChecks = {
         lamps: ref(true),
@@ -156,16 +168,21 @@ export function useInstruments(gameState: any, configuration: Configuration): { 
                 return 1.0;
             }),
             clock: computed((): string => {
+                const config = configuration.value;
                 let time = gameState.unpaused.time.current;
                 if (typeof time != "number") return "";
+                time += config.prefClockOffset * 60;
                 time = Math.floor(time);
                 const min = (time % 60).toString().padStart(2, "0");
-                time = Math.floor(time / 60);
-                if (configuration.value.prefClock12) {
+                time = Math.floor(time / 60) % 24;
+                if (config.prefClock12) {
+                    instruments.indicators.clockAm.value = time < 12;
+                    instruments.indicators.clockPm.value = time >= 12;
                     time %= 12;
                     if (time == 0) time = 12;
                 } else {
-                    time %= 24;
+                    instruments.indicators.clockAm.value = false;
+                    instruments.indicators.clockPm.value = false;
                 }
                 const hrs = time.toString().padStart(2, "!");
                 return `!${hrs}:${min}`;
@@ -180,12 +197,13 @@ export function useInstruments(gameState: any, configuration: Configuration): { 
             eta: computed((): string => {
                 let remain = gameState.unpaused.time.navRemain;
                 if (typeof remain != "number") return "";
-                return remainingTimeDisplay(remain - remain);
+                return remainingTimeDisplay(remain);
             }),
             rest: computed((): string => {
                 let remain = gameState.unpaused.time.restRemain;
                 if (typeof remain != "number") return "";
-                return remainingTimeDisplay(remain - remain);
+                if (remain <= 0 && configuration.value.prefFlashRestIndicator && !blink.value) return "";
+                return remainingTimeDisplay(remain);
             }),
             odometer: computed((): string => {
                 let odo = gameState.unpaused.axles.odo;
@@ -199,6 +217,36 @@ export function useInstruments(gameState: any, configuration: Configuration): { 
             }),
             gearCruiseR: computed((): string => {
                 return (gearCruise.value + "!!")[1] as string;
+            }),
+            cruiseControl: computed((): string => {
+                const config = configuration.value;
+                let cc = gameState.unpaused.util.cruiseControl;
+                let speed = gameState.unpaused.axles.speed;
+                let val = null;
+                if (typeof speed == "number") speed = Math.abs(speed) / 100;
+                if (config.prefCruiseDisplayMode == "speedAlways") {
+                    // Ignore cruise control value.
+                    val = speed;
+                } else if (typeof cc != "number" || cc <= 0) {
+                    // Cruise control is off.
+                    if (config.prefCruiseDisplayMode == "retain") {
+                        val = lastCruiseControl;
+                    } else if (config.prefCruiseDisplayMode == "speedWhenDisabled") {
+                        val = speed;
+                    }
+                } else {
+                    // Cruise control is on.
+                    val = cc;
+                    lastCruiseControl = cc;
+                }
+                if (typeof val != "number") return "";
+                const factor = config.prefSpeedUnit == "mph" ? mpsToMph : mpsToKmh;
+                const value = Math.min(Math.round(val * factor), 99);
+                return value.toString().padStart(2, "!");
+            }),
+            retarder: computed((): string => {
+                if (gameState.unpaused.brake.retarder) return gameState.unpaused.brake.retarder.toString();
+                return "!";
             }),
         },
         indicators: {
@@ -323,7 +371,10 @@ export function useInstruments(gameState: any, configuration: Configuration): { 
             speeding: computed((): boolean => {
                 if (!gameState.unpaused.electric.enabled) return false;
                 if (systemChecks.lamps.value) return true;
-                return speeding.value;
+                const severity = computeSpeedingSeverity();
+                if (severity < 1) return false;
+                if (severity >= 2 && configuration.value.prefFlashOverspeed) return blink.value;
+                return true;
             }),
             transmission: computed((): boolean => {
                 if (!gameState.unpaused.electric.enabled) return false;
@@ -342,6 +393,18 @@ export function useInstruments(gameState: any, configuration: Configuration): { 
                 if (systemChecks.lamps.value) return true;
                 if (gameState.unpaused.lights.turnRight) return true;
                 return false;
+            }),
+            clockAm: ref(false),
+            clockPm: ref(false),
+            transAuto: computed((): boolean => {
+                if (!gameState.unpaused.electric.enabled) return false;
+                if (configuration.value.prefGearDisplayMode == "speed") return false;
+                return gameState.derived.transMode.value == "A";
+            }),
+            transManual: computed((): boolean => {
+                if (!gameState.unpaused.electric.enabled) return false;
+                if (configuration.value.prefGearDisplayMode == "speed") return false;
+                return gameState.derived.transMode.value == "M";
             }),
         },
         needles: {
@@ -412,9 +475,16 @@ export function useInstruments(gameState: any, configuration: Configuration): { 
     // Timers for various animations.
     let electricEnabledMillis: number = 0;
     let engineRunningMillis: number = 0;
-    let blink: number = 0;
+    let blinkTimer: number = 0;
+    let skippedDelta: number = 0;
 
     function animate(timeDelta: number) {
+        const config = configuration.value;
+        skippedDelta += timeDelta;
+        if (skippedDelta < config.perfAnimationThrottle) return;
+        timeDelta = skippedDelta;
+        skippedDelta = 0;
+
         // Get main vehicle system state.
         const power = !!gameState.unpaused.electric.enabled;
         const rpm = gameState.unpaused.engine.rpm;
@@ -423,12 +493,13 @@ export function useInstruments(gameState: any, configuration: Configuration): { 
         // Update timers.
         if (power) {
             electricEnabledMillis += timeDelta;
-            blink += timeDelta / 600;
-            blink %= 1;
+            blinkTimer += timeDelta / 600;
+            blinkTimer %= 1;
         } else {
             electricEnabledMillis = 0;
-            blink = 0;
+            blinkTimer = 0;
         }
+        blink.value = blinkTimer > 0.5;
         if (engine) {
             engineRunningMillis += timeDelta;
         } else {
@@ -436,12 +507,11 @@ export function useInstruments(gameState: any, configuration: Configuration): { 
         }
 
         // Whether to run self-tests.
-        const runTests = configuration.value.prefSelfTest;
+        const runTests = config.prefSelfTest;
 
         // Model startup/self-tests of electrical systems.
         systemChecks.lamps.value = runTests && power && electricEnabledMillis < 1000;
         systemChecks.air.value = runTests && electricEnabledMillis < 1400;
-        const needleTest = runTests && power && electricEnabledMillis < 1500;
         systemChecks.coolant.value = runTests && electricEnabledMillis < 1850;
         systemChecks.fuel.value = runTests && electricEnabledMillis < 2400;
         systemChecks.adBlue.value = runTests && electricEnabledMillis < 2600;
@@ -456,26 +526,18 @@ export function useInstruments(gameState: any, configuration: Configuration): { 
         systemChecks.powerSteering.value = runTests && engineRunningMillis < 4900;
 
         // Animate needles.
+        let fuelNeedleTarget = needleTargets.fuel.value;
+        if (config.prefFuelFollowsAdBlue && needleTargets.adBlue.value < fuelNeedleTarget) {
+            fuelNeedleTarget = needleTargets.adBlue.value;
+        }
+        const needleTest = config.prefSelfTestNeedle && power && electricEnabledMillis < 1500;
         updateNeedle(instruments.needles.air, needleTargets.air.value, power, needleTest, design.ncfg.air, 6, timeDelta);
         updateNeedle(instruments.needles.coolant, needleTargets.coolant.value, power, needleTest, design.ncfg.coolant, 4.5, timeDelta);
-        updateNeedle(instruments.needles.fuel, Math.min(needleTargets.fuel.value, needleTargets.adBlue.value), power, needleTest, design.ncfg.fuel, 4, timeDelta);
+        updateNeedle(instruments.needles.fuel, fuelNeedleTarget, power, needleTest, design.ncfg.fuel, 4, timeDelta);
         updateNeedle(instruments.needles.oil, needleTargets.oil.value, power, needleTest, design.ncfg.oil, 5, timeDelta);
         updateNeedle(instruments.needles.speed, needleTargets.speed.value, power, needleTest, design.ncfg.speed, 5.3, timeDelta);
         updateNeedle(instruments.needles.rpm, needleTargets.rpm.value, power, needleTest, design.ncfg.rpm, 5.5, timeDelta);
         updateNeedle(instruments.needles.consumption, needleTargets.consumption.value, power, needleTest, design.ncfg.consumption, 2, timeDelta);
-
-        // Animate the speeding indicator.
-        switch (computeSpeedingLevel()) {
-            case 0:
-                speeding.value = false;
-                break;
-            case 1:
-                speeding.value = true;
-                break;
-            default:
-                speeding.value = blink > 0.5;
-                break;
-        }
     }
 
     useAnimation(animate);

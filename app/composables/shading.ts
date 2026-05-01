@@ -67,7 +67,7 @@ export function useShading(gameState: GameState, instruments: Instruments, confi
         });
     }
 
-    function computeColors() {
+    function computeColors(): Shading {
         const amb_lvl = ambientLevel.value;
         const bl_lvl = instruments.backlight.value;
         const disp_lvl = instruments.displays.brightness.value;
@@ -172,7 +172,7 @@ export function useShading(gameState: GameState, instruments: Instruments, confi
 
         const primary = shade(c_prim, multiplyColors(c_prim, c_bl), bl_lvl, 0.9);
         const secondary = shade(c_sec, multiplyColors(c_sec, c_bl), bl_lvl, 0.9);
-        const needle = shade(c_ndl, c_ndl, bl_lvl, 0.9);
+        const needle = shade(c_ndl, multiplyColors(c_ndl, c_nbl), bl_lvl, 0.9);
         const display = shade(c_seg, c_dis, disp_lvl, 0.4);
         const indicator_red = shade(c_seg, c_red, ind_lvl, 0.4);
         const indicator_amber = shade(c_seg, c_amb, ind_lvl, 0.4);
@@ -199,12 +199,14 @@ export function useShading(gameState: GameState, instruments: Instruments, confi
                 amber: indicator_amber.indicator,
                 green: indicator_green.indicator,
                 blue: indicator_blue.indicator,
+                display: display.indicator,
             },
             divIndicator: {
                 red: indicator_red.divIndicator,
                 amber: indicator_amber.divIndicator,
                 green: indicator_green.divIndicator,
                 blue: indicator_blue.divIndicator,
+                display: display.divIndicator,
             }
         };
     }

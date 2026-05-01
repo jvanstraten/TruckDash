@@ -93,6 +93,12 @@ const {
           :class="['instrumentCluster_' + display.fnt.toLowerCase()]"
       >{{ instruments.displays[display.id].value }}</text>
     </g>
+    <path
+        v-for="indicator in design.layer0.ind"
+        :transform="'translate(' + indicator.co.x + ' ' + indicator.co.y + ')'"
+        :d="indicator.pth"
+        :style="shading.indicator[indicator.col][instruments.indicators[indicator.id].value ? 'on' : 'off']"
+    />
     <g :style="shading.needle.needle">
       <path
           v-for="needle in design.layer0.ndl"

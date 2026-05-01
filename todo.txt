@@ -1,10 +1,5 @@
 zoom control for displays
 flat shading for displays
-clock timezone configuration
-fuel gauge follows adblue configuration
-speeding indicator flash enable configuration
-animation update rate limit configuration
-reorganize configuration menu
 control stalk design
 swipe controls
 truck config quick action menu (power, trailer hook, diff lock, lift axle x2)

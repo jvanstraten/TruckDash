@@ -73,6 +73,8 @@ custom-structures:
         key: truck.wear.engine
 
     transmission:
+      mode:
+        key: controls.shifter.type
       realGear:
         key: truck.engine.gear
       indicatedGear:
@@ -103,6 +105,8 @@ custom-structures:
         key: truck.brake.motor
       retarder:
         key: truck.brake.retarder
+      retarderMax:
+        key: truck.retarder.steps
 
     fuel:
       amount:
@@ -163,10 +167,22 @@ custom-structures:
         key: truck.light.lblinker
       turnRight:
         key: truck.light.rblinker
+      turnSwLeft:
+        key: truck.lblinker
+      turnSwRight:
+        key: truck.rblinker
+      turnSwSteer:
+        key: truck.effective.steering
+        scale: 100
+        operator: round
+      hazardSw:
+        key: truck.hazard.warning
       dash:
         key: truck.dashboard.backlight
 
     util:
+      wipers:
+        key: truck.wipers
       cruiseControl:
         key: truck.cruise_control
       speedLimit:

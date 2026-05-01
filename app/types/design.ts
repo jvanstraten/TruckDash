@@ -9,7 +9,8 @@ export type Label = {
     txt: string,
 };
 
-export type DisplayId = "clock" | "deadline" | "eta" | "gearCruiseL" | "gearCruiseR" | "odometer" | "rest";
+export type DisplayId = "clock" | "deadline" | "eta" | "gearCruiseL" |
+    "gearCruiseR" | "odometer" | "rest" | "cruiseControl" | "retarder";
 
 export type DisplayType = "DESG7" | "DESG14";
 
@@ -40,9 +41,9 @@ export type IndicatorId =
     "cruiseControl" | "diffLock" | "engine" | "fuel" | "gameDisconnected" |
     "gamePaused" | "highBeam" | "lowBeam" | "oil" | "parkingBrake" |
     "parkingLights" | "powerSteering" | "retarder" | "speeding" | "transmission" |
-    "turnLeft" | "turnRight";
+    "turnLeft" | "turnRight" | "clockAm" | "clockPm" | "transManual" | "transAuto";
 
-export type IndicatorColor = "red" | "amber" | "green" | "blue";
+export type IndicatorColor = "red" | "amber" | "green" | "blue" | "display";
 
 export type Indicator = {
     co: Coordinate,

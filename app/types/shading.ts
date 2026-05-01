@@ -24,11 +24,13 @@ export type Shading = {
         amber: IndicatorStyles,
         green: IndicatorStyles,
         blue: IndicatorStyles,
+        display: IndicatorStyles,
     }
     divIndicator: {
         red: IndicatorStyles,
         amber: IndicatorStyles,
         green: IndicatorStyles,
         blue: IndicatorStyles,
+        display: IndicatorStyles,
     }
 };

@@ -9,6 +9,8 @@ export type Instruments = {
         odometer: globalThis.ComputedRef<string>,
         gearCruiseL: globalThis.ComputedRef<string>,
         gearCruiseR: globalThis.ComputedRef<string>,
+        cruiseControl: globalThis.ComputedRef<string>,
+        retarder: globalThis.ComputedRef<string>,
     },
     indicators: {
         brightness: globalThis.ComputedRef<number>,
@@ -36,6 +38,10 @@ export type Instruments = {
         transmission: globalThis.ComputedRef<boolean>,
         turnLeft: globalThis.ComputedRef<boolean>,
         turnRight: globalThis.ComputedRef<boolean>,
+        clockAm: Ref<boolean>,
+        clockPm: Ref<boolean>,
+        transAuto: globalThis.ComputedRef<boolean>,
+        transManual: globalThis.ComputedRef<boolean>,
     },
     needles: {
         air: Ref<number>,

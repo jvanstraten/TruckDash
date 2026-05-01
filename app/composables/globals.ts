@@ -8,16 +8,24 @@ export const configDefaults: ConfigurationData = {
 
     // Preferences.
     prefSelfTest: true,
+    prefSelfTestNeedle: true,
     prefClock12: false,
-    prefGearCruiseMode: "mixed-kmh",
+    prefClockOffset: 0,
+    prefGearDisplayMode: "gear",
+    prefCruiseDisplayMode: "normal",
+    prefSpeedUnit: "kmh",
     prefShading: true,
     prefTimezones: true,
     prefDisplayStartup: true,
     prefDisplayFollowsTruck: true,
     prefDisplayStandby: true,
+    prefFuelFollowsAdBlue: true,
+    prefFlashOverspeed: true,
+    prefFlashRestIndicator: false,
 
     // Settings that trade graphical fidelity for rendering speed.
-    perfTelemetryThrottle: 33,
+    perfTelemetryThrottle: 30,
+    perfAnimationThrottle: 14,
     perfAnimateNeedles: true,
     perfNeedleDetails: true,
     perfAnimateIndicators: false,
@@ -94,6 +102,7 @@ const gameState: GameState = {
             wear: null,
         },
         transmission: {
+            mode: null,
             realGear: null,
             indicatedGear: null,
             diffLock: null,
@@ -109,6 +118,7 @@ const gameState: GameState = {
             parking: null,
             motor: null,
             retarder: null,
+            retarderMax: null,
         },
         fuel: {
             amount: null,
@@ -140,13 +150,35 @@ const gameState: GameState = {
             beacon: null,
             turnLeft: null,
             turnRight: null,
+            turnSwLeft: null,
+            turnSwRight: null,
+            turnSwSteer: null,
+            hazardSw: null,
             dash: null,
         },
         util: {
+            wipers: null,
             cruiseControl: null,
             speedLimit: null,
         },
     }),
+    derived: {
+        transMode: computed(() => {
+            switch (gameState.unpaused.transmission.mode) {
+                case "manual":
+                case "hshifter":
+                    return "M";
+            }
+            return "A";
+        }),
+        transDirection: computed(() => {
+            const gear = gameState.unpaused.transmission.indicatedGear;
+            if (gear == null) return "N";
+            if (gear > 0) return "D";
+            if (gear < 0) return "R";
+            return "N";
+        }),
+    }
 };
 
 // Game socket. This is a global singleton to avoid connection spam.
