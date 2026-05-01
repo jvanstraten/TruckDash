@@ -277,7 +277,7 @@ const chosenFile = ref();
         />
         <configRadio
             title="Single zone, tap first for switches"
-            subtitle="Swipe actions normally control stalk movement. To control the switches, use a tap-swipe combo. You can swipe as often as you like after tapping; the control layer reverts back on a timer. You can also tap again to revert manually."
+            subtitle="Swipe actions normally control stalk movement. To control the switches, use a tap-swipe combo. You can swipe as often as you like after tapping; the control layer reverts back on a timer."
             :enabled="configuration.stalkGestureMode != 'disabled'"
             v-model="configuration.stalkGestureSwitches"
             value="click"
@@ -332,16 +332,16 @@ const chosenFile = ref();
         <configBool
             title="Swap gear up/down and braking"
             subtitle="Up/down controls engine brake/retarder instead of gear up/down (and vice versa)."
-            v-model="configuration.stalkSwapPaddleBrake"
+            v-model="configuration.stalkSwapGearBrake"
         />
         <configBool
             title="Invert gear up/down"
-            :subtitle="'Swipe ' + (configuration.stalkSwapPaddleBrake ? 'down instead of up' : 'inboard instead of outboard') + ' for gear up (and vice versa).'"
-            v-model="configuration.stalkInvertTransPaddle"
+            :subtitle="'Swipe ' + (configuration.stalkSwapGearBrake ? 'down instead of up' : 'inboard instead of outboard') + ' for gear up (and vice versa).'"
+            v-model="configuration.stalkInvertTransGear"
         />
         <configBool
             title="Invert braking intensity"
-            :subtitle="'Swipe ' + (configuration.stalkSwapPaddleBrake ? 'inboard instead of outboard' : 'down instead of up') + ' to increase braking action (and vice versa).'"
+            :subtitle="'Swipe ' + (configuration.stalkSwapGearBrake ? 'inboard instead of outboard' : 'down instead of up') + ' to increase braking action (and vice versa).'"
             v-model="configuration.stalkInvertTransBrake"
         />
 

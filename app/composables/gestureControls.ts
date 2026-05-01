@@ -60,7 +60,7 @@ export function useGestureControls(
 
     function startControlLayerTimer() {
         stopControlLayerTimer();
-        controlLayerTimer.value = window.setTimeout(() => resetControlLayer(), 1000);
+        controlLayerTimer.value = window.setTimeout(() => resetControlLayer(), 500);
     }
 
     function describeActionWithText(action: ControlAction): string {
@@ -84,7 +84,7 @@ export function useGestureControls(
                 inc: "increase wiper setting",
                 dec: "decrease wiper setting",
             },
-            transPaddle: {
+            transGear: {
                 inc: "gear up",
                 dec: "gear down",
             },
@@ -141,7 +141,7 @@ export function useGestureControls(
                 mappings.reverse();
                 break;
             case "click":
-                if (controlLayer.value % 2 == 0) {
+                if (controlLayer.value == 0) {
                     mappings = [mappings[1]!];
                 } else {
                     mappings = [mappings[0]!];

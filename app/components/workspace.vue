@@ -33,7 +33,7 @@ const { configuration } = useConfiguration();
 const stalkConfiguration = useStalkConfiguration(configuration);
 
 // Use the telemetry connection (TruckTel).
-const { gameState, gameSocket } = useGame(configuration);
+const { gameState, sendToGame } = useGame(configuration);
 
 // Use instrument logic.
 const { instruments } = useInstruments(gameState, configuration);
@@ -75,12 +75,14 @@ function onGesture(data: GestureData) {
   }
 
   // Don't actually send events to the game when mapping is active.
-  if (mapping) {
-    return;
-  }
+  if (mapping) return;
 
-  // TODO send input to game...
+  // Get rid of inputs not addressed to the game.
+  if (action === undefined) return;
+  if (action === "layer") return;
 
+  const [axis, dir] = action;
+  sendToGame(`${axis}-${dir}`);
 }
 
 const gestures = useGestureDetection(onGesture);

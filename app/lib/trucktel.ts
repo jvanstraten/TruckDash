@@ -348,7 +348,11 @@ export class TruckTelSocket {
     private send(message: any): void {
         if (this.socket !== undefined &&
             this.socket.readyState === WebSocket.OPEN) {
-            this.socket.send(JSON.stringify(message));
+            const s = JSON.stringify(message);
+            if (this.debug) {
+                console.info(`Game input: ${s}`);
+            }
+            this.socket.send(s);
         } else {
             console.error("Failed to send input; game is not connected");
         }

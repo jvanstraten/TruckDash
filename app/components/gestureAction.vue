@@ -31,7 +31,7 @@ function describeActionWithIcons(action: ControlAction): string[] {
       inc: ["wiper", "plus"],
       dec: ["wiper", "minus"],
     },
-    transPaddle: {
+    transGear: {
       inc: ["cog-box", "plus"],
       dec: ["cog-box", "minus"],
     },

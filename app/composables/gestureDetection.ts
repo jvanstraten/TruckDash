@@ -11,6 +11,7 @@ export type GestureConfig = {
     receiveSwipes?: boolean;
     receiveHolds?: boolean;
     minimumDistanceRatio?: number;
+    maximumTapDistanceRatio?: number;
     coneStrictness?: number;
     holdTimeout?: number;
 }
@@ -38,6 +39,7 @@ export function useGestureDetection(
     const receiveSwipes: boolean = config?.receiveSwipes ?? true;
     const receiveHolds: boolean = config?.receiveHolds ?? true;
     const minimumDistanceRatio: number = config?.minimumDistanceRatio ?? defaultMinimumDistanceRatio;
+    const maximumTapDistanceRatio: number = config?.maximumTapDistanceRatio ?? minimumDistanceRatio / 30;
     const coneStrictness: number = config?.coneStrictness ?? defaultConeStrictness;
     const holdTimeout: number = config?.holdTimeout ?? defaultHoldTimeout;
 
@@ -102,8 +104,14 @@ export function useGestureDetection(
         const data = dragData.value;
         if (data === null) return;
 
-        if (Math.abs(event.clientX - data.startX) > 1 || Math.abs(event.clientY - data.startY) > 1) {
-            data.moved = true;
+        if (!data.moved) {
+            const dx = data.currentX - data.startX;
+            const dy = data.currentY - data.startY;
+            const distanceSqr = dx * dx + dy * dy;
+            const threshold = Math.min(window.innerWidth, window.innerHeight) * maximumTapDistanceRatio;
+            if (distanceSqr > threshold * threshold) {
+                data.moved = true;
+            }
         }
 
         data.currentX = event.clientX;

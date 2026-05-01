@@ -3,7 +3,7 @@ export type StalkAxisType   // default down/inward <--> up/outward
     | "highBeam"            // (Flash), off, high beams
     | "blinkers"            // Left, (left), off, (right), right
     | "wipers"              // Off, intermittent, low, high
-    | "transPaddle"         // (Gear down), no-op, (gear up)
+    | "transGear"           // (Gear down), no-op, (gear up)
     | "transBrake"          // (Brake reduce), no-op, (brake increase)
     | "transDirection"      // Reverse, neutral, drive
     | "transMode";          // Manual, automatic
@@ -39,13 +39,13 @@ export function useStalkConfiguration(configuration: Configuration) : StalkConfi
     function getTransStalkAxes(): StalkAxes {
         const config = configuration.value;
         const transBrake: StalkAxis = { type: "transBrake", invert: config.stalkInvertTransBrake };
-        const transPaddle: StalkAxis = { type: "transPaddle", invert: config.stalkInvertTransPaddle };
+        const transGear: StalkAxis = { type: "transGear", invert: config.stalkInvertTransGear };
         const transMode: StalkAxis = { type: "transMode", invert: config.stalkInvertTransMode };
         const transDirection: StalkAxis = { type: "transDirection", invert: config.stalkInvertTransDirection };
 
         return {
-            moveX: config.stalkSwapPaddleBrake ? transPaddle : transBrake,
-            moveY: config.stalkSwapPaddleBrake ? transBrake : transPaddle,
+            moveX: config.stalkSwapGearBrake ? transGear : transBrake,
+            moveY: config.stalkSwapGearBrake ? transBrake : transGear,
             swX: config.stalkSwapModeDirection ? transDirection : transMode,
             swY: config.stalkSwapModeDirection ? transMode : transDirection,
         };

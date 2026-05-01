@@ -1,4 +1,5 @@
-swipe controls
+transmission stalk swipe controls
+fix gestures because holy fucking shit this ain't it
 control stalk design
 truck config quick action menu (power, trailer hook, diff lock, lift axle x2)
 panel for the above
