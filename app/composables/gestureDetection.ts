@@ -3,8 +3,8 @@ export type GestureType = "click" | "hold" | "left" | "right" | "up" | "down";
 
 export type GestureData = {
     type: GestureType;
-    startX: number | undefined;
-    startY: number | undefined;
+    middleX: number | undefined;
+    middleY: number | undefined;
 }
 
 export type GestureConfig = {
@@ -22,29 +22,45 @@ type DragData = {
     currentX: number;
     currentY: number;
     moved: boolean;
-    holdTimer: number | undefined;
+    holdTimer: number | null;
 };
 
 type SwipeType = false | undefined | "left" | "right" | "up" | "down";
 
-const defaultMinimumDistanceRatio = 0.1;
+const defaultMinimumDistanceRatio = 0.2;
 const defaultConeStrictness = 1.2;
 const defaultHoldTimeout = 500;
 
 export function useGestureDetection(
     callback: (gesture: GestureData) => void,
     config?: GestureConfig,
+    debug?: Ref<string>,
 ) {
 
     const receiveSwipes: boolean = config?.receiveSwipes ?? true;
     const receiveHolds: boolean = config?.receiveHolds ?? true;
     const minimumDistanceRatio: number = config?.minimumDistanceRatio ?? defaultMinimumDistanceRatio;
-    const maximumTapDistanceRatio: number = config?.maximumTapDistanceRatio ?? minimumDistanceRatio / 30;
+    const maximumTapDistanceRatio: number = config?.maximumTapDistanceRatio ?? minimumDistanceRatio / 2;
     const coneStrictness: number = config?.coneStrictness ?? defaultConeStrictness;
     const holdTimeout: number = config?.holdTimeout ?? defaultHoldTimeout;
 
-    const dragData = ref<DragData | null>(null);
-    const pointerIsDown = ref<boolean>(false);
+    let dragData: DragData | null = null;
+    let pointerIsDown: boolean = false;
+
+    let debugResult: string = "...";
+
+    function updateDebug(cause: string) {
+        if (debug === undefined) return;
+
+        let state = pointerIsDown ? "d1" : "d0";
+        if (dragData !== null) {
+            if (dragData.holdTimer !== undefined) state += "T";
+            if (dragData.moved) state += "M";
+        }
+
+        debug.value = `${cause}: ${state}${debugResult}`;
+        debugResult = "...";
+    }
 
     function isSwipe(data: DragData): SwipeType {
         const dx = data.currentX - data.startX;
@@ -62,17 +78,31 @@ export function useGestureDetection(
     }
 
     function finishDrag(type?: GestureType) {
+        debugResult = type === undefined ? "none" : type;
         if (type !== undefined) {
             callback({
                 type,
-                startX: (dragData.value?.startX ?? 0) / window.innerWidth,
-                startY: (dragData.value?.startY ?? 0) / window.innerHeight
+                middleX: ((dragData?.startX ?? 0) + (dragData?.currentX ?? 0)) / (window.innerWidth * 2),
+                middleY: ((dragData?.startY ?? 0) + (dragData?.currentY ?? 0)) / (window.innerHeight * 2)
             });
         }
-        if (dragData.value && dragData.value.holdTimer !== undefined) {
-            window.clearTimeout(dragData.value.holdTimer);
+        if (dragData && dragData.holdTimer !== null) {
+            window.clearTimeout(dragData.holdTimer);
+            dragData.holdTimer = null;
         }
-        dragData.value = null;
+        dragData = null;
+    }
+
+    function onHoldTimer() {
+        const data = dragData;
+        if (data === null) return;
+        data.holdTimer = null;
+
+        const swipe = isSwipe(data);
+        if (swipe === false && !data.moved) {
+            finishDrag("hold");
+        }
+        updateDebug("Ti");
     }
 
     function onPointerDown(event: PointerEvent) {
@@ -81,13 +111,13 @@ export function useGestureDetection(
         const target = event.target as HTMLElement;
         target.setPointerCapture(event.pointerId);
 
-        let holdTimer: number | undefined = undefined;
+        let holdTimer: number | null = null;
         if (receiveHolds) {
             holdTimer = window.setTimeout(() => onHoldTimer(), holdTimeout);
         }
 
-        pointerIsDown.value = true;
-        dragData.value = {
+        pointerIsDown = true;
+        dragData = {
             startX: event.clientX,
             startY: event.clientY,
             currentX: event.clientX,
@@ -95,13 +125,14 @@ export function useGestureDetection(
             moved: false,
             holdTimer,
         }
+        updateDebug("Do");
     }
 
     function onPointerMove(event: MouseEvent) {
         event.stopPropagation();
         event.preventDefault();
 
-        const data = dragData.value;
+        const data = dragData;
         if (data === null) return;
 
         if (!data.moved) {
@@ -121,39 +152,53 @@ export function useGestureDetection(
             const swipe = isSwipe(data);
             if (typeof swipe == "string") finishDrag(swipe);
         }
+        updateDebug("Mo");
     }
 
-    function onHoldTimer() {
-        const data = dragData.value;
+    function onPointerUp(event: PointerEvent) {
+        event.stopPropagation();
+        event.preventDefault();
+        onPointerMove(event);
+        const data = dragData;
         if (data === null) return;
-        data.holdTimer = undefined;
+        finishDrag(data.moved ? undefined : "click");
+        updateDebug("Up");
+    }
 
-        const swipe = isSwipe(data);
-        if (swipe === false && !data.moved) {
-            finishDrag("hold");
-        }
+    function onPointerCancel(event: PointerEvent) {
+        event.stopPropagation();
+        event.preventDefault();
+        finishDrag();
+        pointerIsDown = false;
+        updateDebug("Ca");
     }
 
     function onClick(event: MouseEvent | KeyboardEvent) {
-        if (event instanceof KeyboardEvent || !pointerIsDown.value) {
-            pointerIsDown.value = false;
-            finishDrag("click");
-            return;
-        }
-        pointerIsDown.value = false;
-
         event.stopPropagation();
         event.preventDefault();
 
+        const isEmulated = event instanceof KeyboardEvent || !pointerIsDown;
+        pointerIsDown = false;
+        if (isEmulated) {
+            finishDrag("click");
+            updateDebug("Em");
+            return;
+        }
+
+        // With onPointerUp now preventing default behavior, this is probably
+        // dead code, but I'm too scared to remove it.
         onPointerMove(event);
-        const data = dragData.value;
+        const data = dragData;
         if (data === null) return;
         finishDrag(data.moved ? undefined : "click");
+        updateDebug("Cl");
     }
 
     return {
         onPointerDown,
         onPointerMove,
+        onPointerUp,
+        onPointerCancel,
         onClick,
     };
 }

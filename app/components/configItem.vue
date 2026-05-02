@@ -23,6 +23,7 @@ function onGesture(data: GestureData) {
 }
 
 const gestures = useGestureDetection(onGesture);
+let pointerDown: boolean = false;
 
 function closeTooltip() {
   tooltip.value = false;
@@ -32,12 +33,18 @@ function closeTooltip() {
   }
 }
 
+function onPointerDown(event: PointerEvent) {
+  gestures.onPointerDown(event);
+  pointerDown = true;
+  closeTooltip();
+}
+
 function onPointerMove(event: PointerEvent) {
   gestures.onPointerMove(event);
   if (event.movementX != 0 && event.movementY != 0) {
     closeTooltip();
   }
-  if (tooltipTimer.value === undefined) {
+  if (!pointerDown && tooltipTimer.value === undefined) {
     tooltipTimer.value = window.setTimeout(() => {
       tooltipTimer.value = undefined;
       tooltip.value = true;
@@ -45,7 +52,17 @@ function onPointerMove(event: PointerEvent) {
   }
 }
 
+function onPointerUp(event: PointerEvent) {
+  gestures.onPointerUp(event);
+  pointerDown = false;
+}
+
 function onPointerLeave(event: PointerEvent) {
+  closeTooltip();
+}
+
+function onPointerCancel(event: PointerEvent) {
+  gestures.onPointerCancel(event);
   closeTooltip();
 }
 
@@ -57,8 +74,10 @@ function onPointerLeave(event: PointerEvent) {
       :subtitle="subtitle"
       :active="false"
       :disabled="enabled === false"
-      @pointerdown="gestures.onPointerDown"
+      @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
+      @pointerup="onPointerUp"
+      @pointercancel="onPointerCancel"
       @pointerleave="onPointerLeave"
       @click="gestures.onClick"
       style="touch-action: pan-y; user-select: none"

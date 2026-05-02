@@ -1,5 +1,5 @@
 import type { Configuration } from "~/composables/configuration";
-import type { StalkConfiguration, StalkAxisType } from "~/composables/stalkConfiguration";
+import type { StalkMap, StalkAxisType } from "~/composables/stalkMap";
 import type { GestureData } from "~/composables/gestureDetection";
 
 export type StalkAxisDirection = "inc" | "dec";
@@ -33,7 +33,7 @@ export type GestureMapping = {
 
 export function useGestureControls(
     configuration: Configuration,
-    stalkConfiguration: StalkConfiguration,
+    stalkConfiguration: StalkMap,
     onGestureDecoded?: ComputedRef<((text: string, color: string) => void) | undefined>,
 ) : {
     gestureMapping: ComputedRef<GestureMapping>,
@@ -209,7 +209,7 @@ export function useGestureControls(
         } else if (data.type == "hold") {
             action = actions.hold;
         } else if (actions.zones.length > 0) {
-            zoneIndex = Math.floor(data.startX! * actions.zones.length);
+            zoneIndex = Math.floor(data.middleX! * actions.zones.length);
             const zone = actions.zones[zoneIndex]!;
             action = zone[data.type];
         }

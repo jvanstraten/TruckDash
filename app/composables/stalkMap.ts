@@ -20,12 +20,12 @@ export type StalkAxes = {
     swY: StalkAxis;
 };
 
-export type StalkConfiguration = {
+export type StalkMap = {
     left: ComputedRef<StalkAxes>,
     right: ComputedRef<StalkAxes>,
 };
 
-export function useStalkConfiguration(configuration: Configuration) : StalkConfiguration {
+export function useStalkMap(configuration: Configuration) : StalkMap {
     function getUtilityStalkAxes(): StalkAxes {
         const config = configuration.value;
         return {

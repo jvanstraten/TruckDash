@@ -9,7 +9,7 @@ import { useGame } from "~/composables/game";
 import { useInstruments } from "~/composables/instruments";
 import { useShading } from "~/composables/shading";
 import { useGestureDetection, type GestureData } from "~/composables/gestureDetection";
-import { useStalkConfiguration } from "~/composables/stalkConfiguration";
+import { useStalkMap } from "~/composables/stalkMap";
 import { useGestureControls } from "~/composables/gestureControls";
 
 // Adjust: layout adjustment overlay is active.
@@ -28,9 +28,9 @@ const emit = defineEmits(["menu"]);
 // Load configuration from local storage.
 const { configuration } = useConfiguration();
 
-// Decode stalk configuration, because it's a pain in the ass and it's needed
+// Decode stalk control map, because it's a pain in the ass, and it's needed
 // both here and in the stalk components.
-const stalkConfiguration = useStalkConfiguration(configuration);
+const stalkMap = useStalkMap(configuration);
 
 // Use the telemetry connection (TruckTel).
 const { gameState, sendToGame } = useGame(configuration);
@@ -51,7 +51,7 @@ function pushGesture(text: string, color: string) {
 const onGestureDecoded = computed(() => {
   return mapping ? pushGesture : undefined;
 });
-const { decodeGesture, gestureMapping } = useGestureControls(configuration, stalkConfiguration, onGestureDecoded);
+const { decodeGesture, gestureMapping } = useGestureControls(configuration, stalkMap, onGestureDecoded);
 
 
 
@@ -85,7 +85,14 @@ function onGesture(data: GestureData) {
   sendToGame(`${axis}-${dir}`);
 }
 
-const gestures = useGestureDetection(onGesture);
+const gestureDebug = ref<string>("...");
+const gestureDebugHistory = ref<string[]>([]);
+const gestures = useGestureDetection(onGesture, {}, gestureDebug);
+
+watch(gestureDebug, () => {
+  if (gestureDebugHistory.value.length > 50) gestureHistory.value.splice(0);
+  gestureDebugHistory.value.push(gestureDebug.value);
+});
 
 </script>
 
@@ -95,6 +102,8 @@ const gestures = useGestureDetection(onGesture);
       :style="{'background-color': configuration.themeWorkspaceFollowsBackground ? shading.background : configuration.themeWorkspace}"
       @pointerdown="gestures.onPointerDown"
       @pointermove="gestures.onPointerMove"
+      @pointerup="gestures.onPointerUp"
+      @pointercancel="gestures.onPointerCancel"
       @click="gestures.onClick"
   >
     <uiContainer
@@ -138,18 +147,23 @@ const gestures = useGestureDetection(onGesture);
       />
     </uiContainer>
 
+    <v-snackbar-queue
+        v-model="gestureHistory"
+        :close-delay="200000"
+        location="bottom end"
+        display-strategy="overflow"
+        :total-visible="10"
+    />
+
+    <div v-if="false" style="position: absolute; left: 0; bottom: 0">
+      <div v-for="message in gestureDebugHistory">{{message}}</div>
+    </div>
+
     <gestureInputMap
         v-if="mapping"
         :gestureMapping="gestureMapping"
     />
 
-    <v-snackbar-queue
-        v-model="gestureHistory"
-        close-delay="2000"
-        location="bottom end"
-        display-strategy="overflow"
-        :total-visible="3"
-    />
   </div>
 
 </template>

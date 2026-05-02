@@ -71,44 +71,46 @@ function openMenu() {
                 @click="isActive.value = false"
             ></v-btn>
           </template>
-          <v-list lines="two" select-strategy="leaf">
-            <v-list-item
-                :title="fullscreen.isFullscreen.value ? 'Exit full screen' : 'Go full screen'"
-                :active="false"
-                @click="toggleFullscreen(); isActive.value = false"
-            >
-              <template v-slot:prepend>
-                <v-icon>{{ fullscreen.isFullscreen.value ? 'mdi-fullscreen-exit' : 'mdi-fullscreen' }}</v-icon>
-              </template>
-            </v-list-item>
-            <v-list-item
-                title="Configuration"
-                :active="false"
-                @click="currentMenu = 'config'"
-            >
-              <template v-slot:prepend>
-                <v-icon>mdi-cog-outline</v-icon>
-              </template>
-            </v-list-item>
-            <v-list-item
-                title="Go to GitHub page"
-                :active="false"
-                @click="github"
-            >
-              <template v-slot:prepend>
-                <v-icon>mdi-source-branch</v-icon>
-              </template>
-            </v-list-item>
-            <v-list-item
-                title="Return"
-                :active="false"
-                @click="isActive.value = false"
-            >
-              <template v-slot:prepend>
-                <v-icon>mdi-arrow-left</v-icon>
-              </template>
-            </v-list-item>
-          </v-list>
+          <v-card-text>
+            <v-list lines="two" select-strategy="leaf">
+              <v-list-item
+                  :title="fullscreen.isFullscreen.value ? 'Exit full screen' : 'Go full screen'"
+                  :active="false"
+                  @click="toggleFullscreen(); isActive.value = false"
+              >
+                <template v-slot:prepend>
+                  <v-icon>{{ fullscreen.isFullscreen.value ? 'mdi-fullscreen-exit' : 'mdi-fullscreen' }}</v-icon>
+                </template>
+              </v-list-item>
+              <v-list-item
+                  title="Configuration"
+                  :active="false"
+                  @click="currentMenu = 'config'"
+              >
+                <template v-slot:prepend>
+                  <v-icon>mdi-cog-outline</v-icon>
+                </template>
+              </v-list-item>
+              <v-list-item
+                  title="Go to GitHub page"
+                  :active="false"
+                  @click="github"
+              >
+                <template v-slot:prepend>
+                  <v-icon>mdi-source-branch</v-icon>
+                </template>
+              </v-list-item>
+              <v-list-item
+                  title="Return"
+                  :active="false"
+                  @click="isActive.value = false"
+              >
+                <template v-slot:prepend>
+                  <v-icon>mdi-arrow-left</v-icon>
+                </template>
+              </v-list-item>
+            </v-list>
+          </v-card-text>
         </v-card>
 
         <v-card v-if="currentMenu == 'config'" title="TruckDash" subtitle="Configuration">
@@ -146,6 +148,7 @@ function openMenu() {
 body, html {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  user-select: none;
   overflow: hidden;
   height: 100vh;
   margin: 0;

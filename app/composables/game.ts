@@ -1,5 +1,6 @@
 import { onMounted, onUnmounted, reactive, watch, ref } from "vue";
 import { TruckTelSocket } from "~/lib/trucktel";
+import Configuration from "~/components/configuration.vue";
 
 //-----------------------------------------------------------------------------
 // Type definitions
@@ -219,6 +220,14 @@ gameSocket.debug = true;
 // Low-beam logic
 //-----------------------------------------------------------------------------
 
+// Skip the parking lights position for the low beams switch.
+let utilStalkLowBeamCfgSkipPark: boolean = false;
+
+function utilStalkLowBeamSyncCfg(configuration: ConfigurationData) {
+    utilStalkLowBeamCfgSkipPark = configuration.stalkSkipParkingLights;
+}
+
+// Switch position.
 const utilStalkLowBeam = computed((): number => {
     if (telemetryState.unpaused.lights.low) {
         return 2;
@@ -232,8 +241,11 @@ const utilStalkLowBeam = computed((): number => {
 function utilStalkLowBeamInc() {
     switch (utilStalkLowBeam.value) {
         case 0:
-            gameSocket.pressInput("lightpark");
-            break;
+            if (!utilStalkLowBeamCfgSkipPark) {
+                gameSocket.pressInput("lightpark");
+                break;
+            }
+            // fallthrough
         case 1:
             gameSocket.pressInput("lighton");
             break;
@@ -242,11 +254,14 @@ function utilStalkLowBeamInc() {
 
 function utilStalkLowBeamDec() {
     switch (utilStalkLowBeam.value) {
+        case 2:
+            if (!utilStalkLowBeamCfgSkipPark) {
+                gameSocket.pressInput("lightpark");
+                break;
+            }
+            // fallthrough
         case 1:
             gameSocket.pressInput("lightoff");
-            break;
-        case 2:
-            gameSocket.pressInput("lightpark");
             break;
     }
 }
@@ -255,31 +270,49 @@ function utilStalkLowBeamDec() {
 // High-beam logic
 //-----------------------------------------------------------------------------
 
-const utilStalkHighBeamMomentaryTimer = ref<undefined | number>(undefined);
+// High beam "horn" mode. When 'reverse', swipe in "decrease" direction to
+// flash high beams. When 'middle', swipe once in "increase" direction to
+// flash, and twice to keep on. When 'disabled', the stalk only has two
+// positions.
+let utilStalkHighBeamCfgLightHornMode = ref<"disabled" | "reverse" | "middle">("middle");
 
+// Timer for light horn behavior.
+let utilStalkHighBeamCfgLightHornMillis: number = 800;
+
+function utilStalkHighBeamSyncCfg(configuration: ConfigurationData) {
+    utilStalkHighBeamCfgLightHornMode.value = configuration.stalkLightHornMode;
+    utilStalkHighBeamCfgLightHornMillis = configuration.stalkLightHornTimer;
+}
+
+// Timer for momentary flashes.
+const utilStalkHighBeamLightHornTimer = ref<undefined | number>(undefined);
+
+// Stalk position.
 const utilStalkHighBeam = computed((): number => {
-    if (utilStalkHighBeamMomentaryTimer.value !== undefined) {
-        return -1;
+    if (utilStalkHighBeamLightHornTimer.value !== undefined) {
+        return utilStalkHighBeamCfgLightHornMode.value === "middle" ? 1 : -1;
     } else if (telemetryState.unpaused.lights.high) {
-        return 1;
+        return utilStalkHighBeamCfgLightHornMode.value === "middle" ? 2 : 1;
     } else {
         return 0;
     }
 });
 
 function utilStalkHighBeamStopMomentary() {
-    if (utilStalkHighBeamMomentaryTimer.value !== undefined) {
-        window.clearTimeout(utilStalkHighBeamMomentaryTimer.value);
-        utilStalkHighBeamMomentaryTimer.value = undefined;
+    if (utilStalkHighBeamLightHornTimer.value !== undefined) {
+        window.clearTimeout(utilStalkHighBeamLightHornTimer.value);
+        utilStalkHighBeamLightHornTimer.value = undefined;
     }
 }
 
 function utilStalkHighBeamStartMomentary() {
     utilStalkHighBeamStopMomentary();
-    utilStalkHighBeamMomentaryTimer.value = window.setTimeout(() => utilStalkHighBeamStopMomentary(), 800);
+    utilStalkHighBeamLightHornTimer.value = window.setTimeout(() => {
+        utilStalkHighBeamStopMomentary()
+    }, utilStalkHighBeamCfgLightHornMillis);
 }
 
-watch(utilStalkHighBeamMomentaryTimer, (value: number | undefined) => {
+watch(utilStalkHighBeamLightHornTimer, (value: number | undefined) => {
     if (value === undefined) {
         gameSocket.releaseInput("lighthorn");
     } else {
@@ -293,15 +326,28 @@ function utilStalkHighBeamInc() {
             utilStalkHighBeamStopMomentary();
             break;
         case 0:
-            gameSocket.pressInput("hblight");
+            if (utilStalkHighBeamCfgLightHornMode.value === "middle") {
+                utilStalkHighBeamStartMomentary();
+            } else {
+                gameSocket.pressInput("hblight");
+            }
+            break;
+        case 1:
+            if (utilStalkHighBeamCfgLightHornMode.value === "middle") {
+                utilStalkHighBeamStopMomentary();
+                gameSocket.pressInput("hblight");
+            }
             break;
     }
 }
 
 function utilStalkHighBeamDec() {
     if (utilStalkHighBeam.value > 0) {
-        gameSocket.pressInput("hblight");
-    } else {
+        if (telemetryState.unpaused.lights.high) {
+            gameSocket.pressInput("hblight");
+        }
+        utilStalkHighBeamStopMomentary();
+    } else if (utilStalkHighBeamCfgLightHornMode.value === "reverse") {
         utilStalkHighBeamStartMomentary();
     }
 }
@@ -310,11 +356,26 @@ function utilStalkHighBeamDec() {
 // Blinker logic
 //-----------------------------------------------------------------------------
 
+// Number of flashes done for a single swipe, or 0 to disable this behavior.
+let utilStalkBlinkersCfgMomentaryCount: number = 3;
+
+// Amount of steering input in percentage points counter to blinker direction
+// needed to automatically cancel the blinkers, or 0 to disable this behavior.
+let utilStalkBlinkersCfgAutoOffSensitivity: number = 20;
+
+function utilStalkBlinkersSyncCfg(configuration: ConfigurationData) {
+    utilStalkBlinkersCfgMomentaryCount = configuration.stalkBlinkersMomentaryCount;
+    utilStalkBlinkersCfgAutoOffSensitivity = configuration.stalkBlinkersAutoOffSensitivity;
+}
+
+// Stalk position.
 const utilStalkBlinkers = ref(0);
 
 // Number of flashes remaining for momentary mode.
 let utilStalkBlinkersMomentaryRemain = 0;
 
+// Whether either blinker was on in the game before the following watch
+// callback. Previous value from Vue doesn't work for some reason.
 let utilStalkBlinkersPrevOn: boolean = false;
 
 watch(telemetryState.unpaused.lights, (value: { turnLeft: null | boolean, turnRight: null | boolean }) => {
@@ -338,10 +399,11 @@ watch(telemetryState.unpaused.lights, (value: { turnSwSteer: null | number }) =>
     // Turn off blinkers if stalk is in +/-2 position and the steering wheel
     // has turned by more than X% in the reverse direction of the blinker.
     if (Math.abs(utilStalkBlinkers.value) != 2) return;
+    if (utilStalkBlinkersCfgAutoOffSensitivity == 0) return;
     let steeringState = value.turnSwSteer ?? 0;
     if (utilStalkBlinkers.value < 0) steeringState = -steeringState;
     utilStalkBlinkersSteeringMax = Math.max(utilStalkBlinkersSteeringMax, steeringState);
-    if (steeringState > utilStalkBlinkersSteeringMax - 20) return;
+    if (steeringState > utilStalkBlinkersSteeringMax - utilStalkBlinkersCfgAutoOffSensitivity) return;
     utilStalkBlinkers.value = 0;
 });
 
@@ -366,9 +428,12 @@ function utilStalkBlinkersLeft() {
             utilStalkBlinkers.value = 0;
             break;
         case 0:
-            utilStalkBlinkersMomentaryRemain = 3;
-            utilStalkBlinkers.value = 1;
-            break;
+            if (utilStalkBlinkersCfgMomentaryCount > 0) {
+                utilStalkBlinkersMomentaryRemain = utilStalkBlinkersCfgMomentaryCount;
+                utilStalkBlinkers.value = 1;
+                break;
+            }
+            // fallthrough
         case 1:
             utilStalkBlinkersSteeringMax = telemetryState.unpaused.lights.turnSwSteer ?? 0;
             utilStalkBlinkers.value = 2;
@@ -384,9 +449,12 @@ function utilStalkBlinkersRight() {
             utilStalkBlinkers.value = 0;
             break;
         case 0:
-            utilStalkBlinkersMomentaryRemain = 3;
-            utilStalkBlinkers.value = -1;
-            break;
+            if (utilStalkBlinkersCfgMomentaryCount > 0) {
+                utilStalkBlinkersMomentaryRemain = utilStalkBlinkersCfgMomentaryCount;
+                utilStalkBlinkers.value = -1;
+                break;
+            }
+            // fallthrough
         case -1:
             utilStalkBlinkersSteeringMax = -(telemetryState.unpaused.lights.turnSwSteer ?? 0);
             utilStalkBlinkers.value = -2;
@@ -398,24 +466,37 @@ function utilStalkBlinkersRight() {
 // Wiper logic
 //-----------------------------------------------------------------------------
 
-// The game doesn't give sufficient information over telemetry to provide valid
-// input on wiper stalk position (it only provides a boolean) so we just keep
-// track of the wiper state ourselves.
+// Switch position. The game doesn't give sufficient information over telemetry
+// to provide valid input on wiper stalk position (it only provides a boolean)
+// so we just keep track of the wiper state ourselves.
 const utilStalkWipers = ref(0);
 
-watch(utilStalkWipers, (value: number) => {
-    gameSocket.pressInput(`wipers${value}`);
+// If we receive a wiper on/off event that disagrees with our stalk position,
+// default our stalk position to the off resp. low positions, so it's at least
+// not completely wrong.
+let utilStalkWipersPrev: boolean = false;
+watch(telemetryState.unpaused.util, () => {
+    const state = !!telemetryState.unpaused.util.wipers;
+    if (state == utilStalkWipersPrev) return;
+    utilStalkWipersPrev = state;
+    if (state && utilStalkWipers.value == 0) {
+        utilStalkWipers.value = 2;
+    } else if (!state && utilStalkWipers.value > 0) {
+        utilStalkWipers.value = 0;
+    }
 });
 
 function utilStalkWipersInc() {
     if (utilStalkWipers.value < 3) {
         utilStalkWipers.value++;
+        gameSocket.pressInput(`wipers${utilStalkWipers.value}`);
     }
 }
 
 function utilStalkWipersDec() {
     if (utilStalkWipers.value > 0) {
         utilStalkWipers.value--;
+        gameSocket.pressInput(`wipers${utilStalkWipers.value}`);
     }
 }
 
@@ -484,7 +565,7 @@ const transStalkMode = computed((): number => {
 // TODO
 
 //-----------------------------------------------------------------------------
-// Game input demultiplexing
+// Input demultiplexing
 //-----------------------------------------------------------------------------
 
 // Semantical control events that can be sent to the game.
@@ -513,6 +594,12 @@ function sendToGame(input: GameInput) {
     }
 }
 
+function syncControlBehaviorConfig(configuration: ConfigurationData) {
+    utilStalkLowBeamSyncCfg(configuration);
+    utilStalkHighBeamSyncCfg(configuration);
+    utilStalkBlinkersSyncCfg(configuration);
+}
+
 //-----------------------------------------------------------------------------
 // Registration
 //-----------------------------------------------------------------------------
@@ -532,6 +619,10 @@ export function useGame(configuration: Configuration): { gameState: GameState, s
         gameSocket.throttle = configuration.value.perfTelemetryThrottle;
         gameSocket.reopen();
     }, { immediate: true });
+
+    // Keep configuration globals in this file in sync.
+    watch(configuration, () => syncControlBehaviorConfig(configuration.value));
+    syncControlBehaviorConfig(configuration.value);
 
     return {
         gameState: {

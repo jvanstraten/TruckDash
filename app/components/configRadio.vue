@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import configItem from "~/components/configItem.vue";
-defineProps(["title", "subtitle", "value"]);
+defineProps(["title", "subtitle", "value", "joiner"]);
 const model = defineModel();
 </script>
 
@@ -11,8 +11,33 @@ const model = defineModel();
       @activate="model = value"
   >
     <template v-slot:prepend>
-      <v-icon v-if="model == value">mdi-radiobox-marked</v-icon>
-      <v-icon v-else>mdi-radiobox-blank</v-icon>
+      <div v-if="joiner" :class="['radio-joiner', 'radio-joiner-' + joiner]"/>
+      <v-icon>mdi-radiobox-{{model == value ? 'marked' : 'blank'}}</v-icon>
     </template>
   </configItem>
 </template>
+
+<style scoped>
+.radio-joiner {
+  position: absolute;
+  width: 1.5em;
+  background-color: #FFF1;
+}
+
+.radio-joiner-first {
+  top: calc(50% - 0.75em);
+  bottom: 0;
+  border-radius: 0.75em 0.75em 0 0;
+}
+
+.radio-joiner-middle {
+  top: 0;
+  bottom: 0;
+}
+
+.radio-joiner-last {
+  top: 0;
+  bottom: calc(50% - 0.75em);
+  border-radius: 0 0 0.75em 0.75em;
+}
+</style>

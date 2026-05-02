@@ -8,7 +8,7 @@ import configColor from "~/components/configColor.vue";
 import configDisplay from "~/components/configDisplay.vue";
 
 import { useConfiguration } from "~/composables/configuration";
-import { useStalkConfiguration } from "~/composables/stalkConfiguration";
+import { useStalkMap } from "~/composables/stalkMap";
 import { useGestureControls } from "~/composables/gestureControls";
 
 const {
@@ -20,8 +20,8 @@ const {
   saveToFile
 } = useConfiguration();
 
-const stalkConfiguration = useStalkConfiguration(configuration);
-const { gestureMapping } = useGestureControls(configuration, stalkConfiguration);
+const stalkMap = useStalkMap(configuration);
+const { gestureMapping } = useGestureControls(configuration, stalkMap);
 
 
 const emit = defineEmits(["adjust", "mapping"]);
@@ -46,7 +46,7 @@ const chosenFile = ref();
   <v-tabs-window v-model="tab">
 
     <v-tabs-window-item value="general">
-      <v-list lines="one" active-strategy="leaf" activatable>
+      <v-list lines="one">
         <v-list-item disabled>General settings</v-list-item>
 
         <v-list-subheader>Shading</v-list-subheader>
@@ -67,12 +67,14 @@ const chosenFile = ref();
             title="Kilometers per hour"
             subtitle="The digital speed displays show speed in kilometers per hour."
             v-model="configuration.prefSpeedUnit"
+            joiner="first"
             value="kmh"
         />
         <configRadio
             title="Miles per hour"
             subtitle="The digital speed displays show speed in miles per hour."
             v-model="configuration.prefSpeedUnit"
+            joiner="last"
             value="mph"
         />
 
@@ -81,12 +83,14 @@ const chosenFile = ref();
             title="24-hour"
             subtitle="The clock shows 24-hour time (aka military time)."
             v-model="configuration.prefClock12"
+            joiner="first"
             :value="false"
         />
         <configRadio
             title="12-hour am/pm"
             subtitle="The clock shows 12-hour time with am/pm notation."
             v-model="configuration.prefClock12"
+            joiner="last"
             :value="true"
         />
 
@@ -182,7 +186,7 @@ const chosenFile = ref();
     </v-tabs-window-item>
 
     <v-tabs-window-item value="layout">
-      <v-list lines="one" active-strategy="leaf" activatable>
+      <v-list lines="one">
         <v-list-item disabled>Layout</v-list-item>
 
         <v-list-subheader>Presets</v-list-subheader>
@@ -225,7 +229,7 @@ const chosenFile = ref();
     </v-tabs-window-item>
 
     <v-tabs-window-item value="stalks">
-      <v-list lines="one" select-strategy="leaf">
+      <v-list lines="one">
         <v-list-item disabled>Control stalks &amp; gestures</v-list-item>
 
         <v-list-subheader>Preview</v-list-subheader>
@@ -239,24 +243,28 @@ const chosenFile = ref();
             title="Both stalks"
             subtitle="Use swipe gestures to control both control stalks. The left-hand side of the screen controls the left-hand stalk, and vice versa."
             v-model="configuration.stalkGestureMode"
+            joiner="first"
             value="bothStalks"
         />
         <configRadio
             title="Left stalk only"
             subtitle="Use swipe gestures to control the left-hand stalk only. Use if you don't want to control the right-hand control stalk, or if you do that on another device."
             v-model="configuration.stalkGestureMode"
+            joiner="middle"
             value="leftStalk"
         />
         <configRadio
             title="Right stalk only"
             subtitle="Use swipe gestures to control the right-hand stalk only. Use if you don't want to control the left-hand control stalk, or if you do that on another device."
             v-model="configuration.stalkGestureMode"
+            joiner="middle"
             value="rightStalk"
         />
         <configRadio
             title="Disable gesture input"
             subtitle="Swipe gesture input is disabled entirely."
             v-model="configuration.stalkGestureMode"
+            joiner="last"
             value="disabled"
         />
 
@@ -266,6 +274,7 @@ const chosenFile = ref();
             subtitle="The swipe zone for each stalk is vertically divided in two. The outer half controls the switches on the stalk, while the inner half moves the stalk itself."
             :enabled="configuration.stalkGestureMode != 'disabled'"
             v-model="configuration.stalkGestureSwitches"
+            joiner="first"
             value="outer"
         />
         <configRadio
@@ -273,6 +282,7 @@ const chosenFile = ref();
             subtitle="The swipe zone for each stalk is vertically divided in two. The inner half controls the switches on the stalk, while the outer half moves the stalk itself."
             :enabled="configuration.stalkGestureMode != 'disabled'"
             v-model="configuration.stalkGestureSwitches"
+            joiner="middle"
             value="inner"
         />
         <configRadio
@@ -280,6 +290,7 @@ const chosenFile = ref();
             subtitle="Swipe actions normally control stalk movement. To control the switches, use a tap-swipe combo. You can swipe as often as you like after tapping; the control layer reverts back on a timer."
             :enabled="configuration.stalkGestureMode != 'disabled'"
             v-model="configuration.stalkGestureSwitches"
+            joiner="last"
             value="click"
         />
 
@@ -288,12 +299,14 @@ const chosenFile = ref();
             title="Tap for menu"
             :subtitle="'Click/tap ' + (configuration.stalkGestureSwitches == 'click' ? 'twice ' : '') + 'to open the main menu. Hold also works.'"
             v-model="configuration.stalkHoldForMenu"
+            joiner="first"
             :value="false"
         />
         <configRadio
             title="Hold for menu"
             subtitle="The menu opens only when you hold your mouse button or finger down without moving it for half a second."
             v-model="configuration.stalkHoldForMenu"
+            joiner="last"
             :value="true"
         />
 
@@ -302,26 +315,118 @@ const chosenFile = ref();
             title="Left-hand drive"
             subtitle="The left-hand stalk controls lights and wipers."
             v-model="configuration.stalkSwap"
+            joiner="first"
             value="lhd"
         />
         <configRadio
             title="Right-hand drive"
             subtitle="The left-hand stalk controls the gearbox."
             v-model="configuration.stalkSwap"
+            joiner="last"
             value="rhd"
         />
 
-        <v-list-subheader>Utility inverts &amp; swaps</v-list-subheader>
+        <v-list-subheader>Turn indicator switch</v-list-subheader>
+        <configRadio
+            title="Swipe once to flash 3x"
+            subtitle="Swipe twice to keep the turn indicator on. Emulates momentary switch."
+            v-model="configuration.stalkBlinkersMomentaryCount"
+            joiner="first"
+            :value="3"
+        />
+        <configRadio
+            title="Swipe once to flash 5x"
+            subtitle="Swipe twice to keep the turn indicator on. Emulates momentary switch."
+            v-model="configuration.stalkBlinkersMomentaryCount"
+            joiner="middle"
+            :value="5"
+        />
+        <configRadio
+            title="Disable momentary switch position"
+            subtitle="The first swipe already locks the stalk in place."
+            v-model="configuration.stalkBlinkersMomentaryCount"
+            joiner="last"
+            :value="0"
+        />
+        <configRadio
+            title="Auto-off high sensitivity"
+            subtitle="The turn indicator automatically turns off when you turn the steering wheel by 10 percentage points in the opposing direction."
+            v-model="configuration.stalkBlinkersAutoOffSensitivity"
+            joiner="first"
+            :value="10"
+        />
+        <configRadio
+            title="Auto-off low sensitivity"
+            subtitle="The turn indicator automatically turns off when you turn the steering wheel by 20 percentage points in the opposing direction."
+            v-model="configuration.stalkBlinkersAutoOffSensitivity"
+            joiner="middle"
+            :value="20"
+        />
+        <configRadio
+            title="Disable auto-off"
+            subtitle="Steering wheel movement does not affect the turn indicators."
+            v-model="configuration.stalkBlinkersAutoOffSensitivity"
+            joiner="last"
+            :value="0"
+        />
+
+        <v-list-subheader>Low-beam switch</v-list-subheader>
+        <configBool
+            title="Skip parking lights position"
+            subtitle="Skip the middle switch position for parking lights, so a single swipe turns the lights fully on or off."
+            v-model="configuration.stalkSkipParkingLights"
+        />
         <configBool
             title="Invert low-beam switch"
             subtitle="Swipe inboard instead of outboard to increment mode (and vice versa)."
             v-model="configuration.stalkInvertLowBeam"
+        />
+
+        <v-list-subheader>High-beam switch</v-list-subheader>
+        <configRadio
+            title="Light horn between on and off"
+            subtitle="Swipe once to flash the high beams; swipe twice to keep the high beams on. Emulates momentary switch position between off and on. This is what the in-game dashboard shows, at least for the truck I tested with."
+            v-model="configuration.stalkLightHornMode"
+            joiner="first"
+            value="middle"
+        />
+        <configRadio
+            title="Light horn before off"
+            subtitle="Swipe in the off direction when the high beams are off to flash the high beams; swipe in the on direction to keep the high beams on. Emulates momentary switch position before off."
+            v-model="configuration.stalkLightHornMode"
+            joiner="middle"
+            value="reverse"
+        />
+        <configRadio
+            title="Disable light-horn switch position"
+            subtitle="The high-beam switch has only the on and off positions."
+            v-model="configuration.stalkLightHornMode"
+            joiner="last"
+            value="disabled"
+        />
+        <configRadio
+            title="Long light horn duration"
+            subtitle="A high-beam flash lasts for about a second."
+            v-model="configuration.stalkLightHornTimer"
+            :enabled="configuration.stalkLightHornMode != 'disabled'"
+            joiner="first"
+            :value="800"
+        />
+        <configRadio
+            title="Short light horn duration"
+            subtitle="A high-beam flash is really just a flash."
+            v-model="configuration.stalkLightHornTimer"
+            :enabled="configuration.stalkLightHornMode != 'disabled'"
+            joiner="last"
+            :value="300"
         />
         <configBool
             title="Invert high-beam switch"
             subtitle="Swipe inboard instead of outboard to enable high beams (and vice versa)."
             v-model="configuration.stalkInvertHighBeam"
         />
+
+        <v-list-subheader>Wiper switch</v-list-subheader>
         <configBool
             title="Invert wiper switch"
             subtitle="Swipe down instead of up to increment wiper speed (and vice versa)."
@@ -382,7 +487,7 @@ const chosenFile = ref();
     </v-tabs-window-item>
 
     <v-tabs-window-item value="instruments">
-      <v-list lines="one" active-strategy="leaf" activatable>
+      <v-list lines="one">
         <v-list-item disabled>Instrument behavior</v-list-item>
 
         <v-list-subheader>Gear display</v-list-subheader>
@@ -390,12 +495,14 @@ const chosenFile = ref();
             title="Normal"
             subtitle='The gear display shows the "indicated gear" from game telemetry.'
             v-model="configuration.prefGearDisplayMode"
+            joiner="first"
             value="gear"
         />
         <configRadio
             title='"Real" gear'
             subtitle="The gear display shows the &quot;real gear&quot; from game telemetry. This appears to be the gear that's actually used by the game's gearbox simulation. It shows N when the truck is not moving (regardless of R/N/D state) and might differ from the indicated gear when your transmission is messed up."
             v-model="configuration.prefGearDisplayMode"
+            joiner="middle"
             value="realGear"
         />
         <configRadio
@@ -403,6 +510,7 @@ const chosenFile = ref();
             subtitle="The gear display is used to show speed digitally instead."
             v-model="configuration.prefGearDisplayMode"
             :enabled="configuration.prefCruiseDisplayMode != 'speedAlways'"
+            joiner="last"
             value="speed"
         />
 
@@ -411,18 +519,21 @@ const chosenFile = ref();
             title="Normal"
             subtitle="The cruise control speed display turns off when cruise control is not enabled."
             v-model="configuration.prefCruiseDisplayMode"
+            joiner="first"
             value="normal"
         />
         <configRadio
             title="Remember speed"
             subtitle="When you or the game turns off cruise control, indicate the last known cruise control speed, which is probably what the &quot;resume&quot; binding will revert the speed to. The game doesn't report the resume speed via telemetry, so this information might be wrong."
             v-model="configuration.prefCruiseDisplayMode"
+            joiner="middle"
             value="retain"
         />
         <configRadio
             title="Show actual speed when disabled"
             subtitle="When cruise control is not on, the display shows the actual speed digitally."
             v-model="configuration.prefCruiseDisplayMode"
+            joiner="middle"
             value="speedWhenDisabled"
         />
         <configRadio
@@ -430,6 +541,7 @@ const chosenFile = ref();
             subtitle="The display is used to show the actual speed digitally, regardless of the cruise control state."
             v-model="configuration.prefCruiseDisplayMode"
             :enabled="configuration.prefGearDisplayMode != 'speed'"
+            joiner="last"
             value="speedAlways"
         />
 
@@ -438,30 +550,35 @@ const chosenFile = ref();
             title="No offset"
             subtitle="The clock shows the game's internal/default timezone."
             v-model="configuration.prefClockOffset"
+            joiner="first"
             :value="0"
         />
         <configRadio
             title="+1 hour"
             subtitle="Adds one hour to the indicated time."
             v-model="configuration.prefClockOffset"
+            joiner="middle"
             :value="+1"
         />
         <configRadio
             title="+2 hours"
             subtitle="Adds two hours to the indicated time."
             v-model="configuration.prefClockOffset"
+            joiner="middle"
             :value="+2"
         />
         <configRadio
             title="-1 hour"
             subtitle="Subtracts one hour from the indicated time."
             v-model="configuration.prefClockOffset"
+            joiner="middle"
             :value="-1"
         />
         <configRadio
             title="-2 hours"
             subtitle="Subtracts two hours from the indicated time."
             v-model="configuration.prefClockOffset"
+            joiner="last"
             :value="-2"
         />
 
@@ -516,7 +633,7 @@ const chosenFile = ref();
   </v-tabs-window-item>
 
     <v-tabs-window-item value="performance">
-      <v-list lines="one" select-strategy="leaf">
+      <v-list lines="one">
         <v-list-item disabled>Performance settings</v-list-item>
 
         <v-list-subheader>Telemetry update rate</v-list-subheader>
@@ -524,42 +641,49 @@ const chosenFile = ref();
             title="No limit"
             subtitle="The game sends telemetry for every frame it renders."
             v-model="configuration.perfTelemetryThrottle"
+            joiner="first"
             :value="0"
         />
         <configRadio
             title="60 fps"
             subtitle="Telemetry updates are sent at most every 14ms (value is rounded down to reduce stuttering)."
             v-model="configuration.perfTelemetryThrottle"
+            joiner="middle"
             :value="14"
         />
         <configRadio
             title="30 fps"
             subtitle="Telemetry updates are sent at most every 30ms (value is rounded down to reduce stuttering)."
             v-model="configuration.perfTelemetryThrottle"
+            joiner="middle"
             :value="30"
         />
         <configRadio
             title="20 fps"
             subtitle="Telemetry updates are sent at most every 45ms (value is rounded down to reduce stuttering)."
             v-model="configuration.perfTelemetryThrottle"
+            joiner="middle"
             :value="45"
         />
         <configRadio
             title="10 fps"
             subtitle="Telemetry updates are sent at most every 100ms."
             v-model="configuration.perfTelemetryThrottle"
+            joiner="middle"
             :value="100"
         />
         <configRadio
             title="5 fps"
             subtitle="Telemetry updates are sent at most every 200ms."
             v-model="configuration.perfTelemetryThrottle"
+            joiner="middle"
             :value="200"
         />
         <configRadio
             title="2 fps"
             subtitle="Telemetry updates are sent at most every 500ms."
             v-model="configuration.perfTelemetryThrottle"
+            joiner="last"
             :value="500"
         />
 
@@ -568,24 +692,28 @@ const chosenFile = ref();
             title="No limit"
             subtitle="Javascript animations update for every browser animation frame. That's usually 60 FPS."
             v-model="configuration.perfAnimationThrottle"
+            joiner="first"
             :value="0"
         />
         <configRadio
             title="60 fps"
             subtitle="Javascript animations update at most every 14ms (value is rounded down to reduce stuttering)."
             v-model="configuration.perfAnimationThrottle"
+            joiner="middle"
             :value="14"
         />
         <configRadio
             title="30 fps"
             subtitle="Javascript animations update at most every 30ms (value is rounded down to reduce stuttering)."
             v-model="configuration.perfAnimationThrottle"
+            joiner="middle"
             :value="30"
         />
         <configRadio
             title="20 fps"
             subtitle="Telemetry updates are sent at most every 45ms (value is rounded down to reduce stuttering)."
             v-model="configuration.perfAnimationThrottle"
+            joiner="last"
             :value="45"
         />
 
@@ -619,7 +747,7 @@ const chosenFile = ref();
     </v-tabs-window-item>
 
     <v-tabs-window-item value="theme">
-      <v-list lines="one" select-strategy="leaf">
+      <v-list lines="one">
         <v-list-item disabled>Theme</v-list-item>
 
         <v-list-subheader>Diffuse</v-list-subheader>
