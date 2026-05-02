@@ -433,38 +433,91 @@ const chosenFile = ref();
             v-model="configuration.stalkInvertWipers"
         />
 
-        <v-list-subheader>Transmission selection inverts &amp; swaps</v-list-subheader>
-        <configBool
-            title="Swap gear up/down and braking"
-            subtitle="Up/down controls engine brake/retarder instead of gear up/down (and vice versa)."
-            v-model="configuration.stalkSwapGearBrake"
+        <v-list-subheader>Transmission switches</v-list-subheader>
+        <configRadio
+            title="Semi-automatic"
+            subtitle="Models the input of a semi-automatic transmission. Gear index and R/N/D are separate axes, the latter being a switch on the stalk. Gear-up goes from 1 to 2, but also from R1 to R2. Gear-down from 1 or R1 or any gear input while the direction switch is in N does nothing. A third switch toggles automatic vs manual mode. In automatic mode, the gear axis provides gear up/down hints."
+            v-model="configuration.stalkTransStalkMode"
+            joiner="first"
+            value="semi"
+        />
+        <configRadio
+            title="Direct-mapped with hints"
+            subtitle="The gear up/down axis is directly mapped to the gear (hint) up and gear (hint) down inputs of the game. The hint inputs are used when automatic or arcade controls are selected and the truck is moving."
+            v-model="configuration.stalkTransStalkMode"
+            joiner="middle"
+            value="directWithHints"
+        />
+        <configRadio
+            title="Direct-mapped without hints"
+            subtitle="The gear up/down axis is directly mapped to the gear up and gear down inputs of the game. The gear up/down hint inputs are unbound."
+            v-model="configuration.stalkTransStalkMode"
+            joiner="middle"
+            value="fullDirect"
+        />
+        <configRadio
+            title="Disable controls"
+            subtitle="Use this if you have an H-shifter or don't want to think about gearboxes at all."
+            v-model="configuration.stalkTransStalkMode"
+            joiner="last"
+            value="disabled"
         />
         <configBool
             title="Invert gear up/down"
             :subtitle="'Swipe ' + (configuration.stalkSwapGearBrake ? 'down instead of up' : 'inboard instead of outboard') + ' for gear up (and vice versa).'"
             v-model="configuration.stalkInvertTransGear"
+            :enabled="configuration.stalkTransStalkMode != 'disabled'"
+        />
+        <configBool
+            title="Invert direction"
+            :subtitle="'Swipe ' + (configuration.stalkSwapModeDirection ? 'down instead of up' : 'inboard instead of outboard') + ' to move toward forward drive (and vice versa).'"
+            v-model="configuration.stalkInvertTransDirection"
+            :enabled="configuration.stalkTransStalkMode == 'semi'"
+        />
+        <configBool
+            title="Invert transmission mode"
+            :subtitle="'Swipe ' + (configuration.stalkSwapModeDirection ? 'inboard instead of outboard' : 'down instead of up') + ' to enable automatic transmission.'"
+            v-model="configuration.stalkInvertTransMode"
+            :enabled="configuration.stalkTransStalkMode != 'disabled'"
+        />
+        <configBool
+            title="Swap transmission mode and direction"
+            subtitle="Up/down controls transmission mode (manual/auto) instead of direction (and vice versa)."
+            v-model="configuration.stalkSwapModeDirection"
+            :enabled="configuration.stalkTransStalkMode != 'disabled'"
+        />
+
+        <v-list-subheader>Engine brake and retarder</v-list-subheader>
+        <configRadio
+            title="Prefer retarder"
+            subtitle="The braking-action axis of the stalk is mapped to retarder level if a retarder is installed on the truck. If not, it controls engine brake intensity."
+            v-model="configuration.stalkBrakingMode"
+            joiner="first"
+            value="auto"
+        />
+        <configRadio
+            title="Force retarder"
+            subtitle="The braking-action axis of the stalk always sends input to the game to try to control the retarder, whether one is installed or not."
+            v-model="configuration.stalkBrakingMode"
+            joiner="middle"
+            value="retarder"
+        />
+        <configRadio
+            title="Force engine brake"
+            subtitle="The braking-action axis of the stalk always controls the engine brake, regardless of whether a retarder is installed."
+            v-model="configuration.stalkBrakingMode"
+            joiner="last"
+            value="engine"
         />
         <configBool
             title="Invert braking intensity"
             :subtitle="'Swipe ' + (configuration.stalkSwapGearBrake ? 'inboard instead of outboard' : 'down instead of up') + ' to increase braking action (and vice versa).'"
             v-model="configuration.stalkInvertTransBrake"
         />
-
-        <v-list-subheader>Transmission mode inverts &amp; swaps</v-list-subheader>
         <configBool
-            title="Swap transmission mode and direction"
-            subtitle="Up/down controls transmission mode (manual/auto) instead of direction (and vice versa)."
-            v-model="configuration.stalkSwapModeDirection"
-        />
-        <configBool
-            title="Invert transmission direction"
-            :subtitle="'Swipe ' + (configuration.stalkSwapModeDirection ? 'down instead of up' : 'inboard instead of outboard') + ' to move toward forward drive (and vice versa).'"
-            v-model="configuration.stalkInvertTransDirection"
-        />
-        <configBool
-            title="Invert transmission mode"
-            :subtitle="'Swipe ' + (configuration.stalkSwapModeDirection ? 'inboard instead of outboard' : 'down instead of up') + ' to enable automatic transmission.'"
-            v-model="configuration.stalkInvertTransMode"
+            title="Swap gear up/down and braking"
+            subtitle="Up/down controls engine brake/retarder instead of gear up/down (and vice versa)."
+            v-model="configuration.stalkSwapGearBrake"
         />
 
         <v-list-subheader>Test or reset</v-list-subheader>

@@ -1,6 +1,5 @@
 import { onMounted, onUnmounted, reactive, watch, ref } from "vue";
 import { TruckTelSocket } from "~/lib/trucktel";
-import Configuration from "~/components/configuration.vue";
 
 //-----------------------------------------------------------------------------
 // Type definitions
@@ -420,8 +419,9 @@ watch(utilStalkBlinkers, (value: number) => {
     }
 });
 
-function utilStalkBlinkersLeft() {
-    switch (utilStalkBlinkers.value) {
+function utilStalkBlinkersAdj(dir: "left" | "right") {
+    const sign = {left: 1, right: -1}[dir];
+    switch (utilStalkBlinkers.value * sign) {
         case -2:
         case -1:
             utilStalkBlinkersMomentaryRemain = 0;
@@ -430,34 +430,13 @@ function utilStalkBlinkersLeft() {
         case 0:
             if (utilStalkBlinkersCfgMomentaryCount > 0) {
                 utilStalkBlinkersMomentaryRemain = utilStalkBlinkersCfgMomentaryCount;
-                utilStalkBlinkers.value = 1;
+                utilStalkBlinkers.value = sign;
                 break;
             }
             // fallthrough
         case 1:
-            utilStalkBlinkersSteeringMax = telemetryState.unpaused.lights.turnSwSteer ?? 0;
-            utilStalkBlinkers.value = 2;
-            break;
-    }
-}
-
-function utilStalkBlinkersRight() {
-    switch (utilStalkBlinkers.value) {
-        case 2:
-        case 1:
-            utilStalkBlinkersMomentaryRemain = 0;
-            utilStalkBlinkers.value = 0;
-            break;
-        case 0:
-            if (utilStalkBlinkersCfgMomentaryCount > 0) {
-                utilStalkBlinkersMomentaryRemain = utilStalkBlinkersCfgMomentaryCount;
-                utilStalkBlinkers.value = -1;
-                break;
-            }
-            // fallthrough
-        case -1:
-            utilStalkBlinkersSteeringMax = -(telemetryState.unpaused.lights.turnSwSteer ?? 0);
-            utilStalkBlinkers.value = -2;
+            utilStalkBlinkersSteeringMax = (telemetryState.unpaused.lights.turnSwSteer ?? 0) * sign;
+            utilStalkBlinkers.value = 2 * sign;
             break;
     }
 }
@@ -501,29 +480,6 @@ function utilStalkWipersDec() {
 }
 
 //-----------------------------------------------------------------------------
-// Gear shifting logic
-//-----------------------------------------------------------------------------
-
-// Transmission positive gear index, ignoring neutral.
-const transGearIndex = computed(() => {
-    return Math.max(1, Math.abs(telemetryState.unpaused.transmission.indicatedGear ?? 0));
-});
-
-// Gear shift stalk position. Just for visual feedback.
-const transStalkShift = ref(0);
-
-// TODO
-
-//-----------------------------------------------------------------------------
-// Engine brake and retarder logic
-//-----------------------------------------------------------------------------
-
-// Retarder stalk position. Just for visual feedback.
-const transStalkBrake = ref(0);
-
-// TODO
-
-//-----------------------------------------------------------------------------
 // Transmission direction logic
 //-----------------------------------------------------------------------------
 
@@ -541,7 +497,27 @@ const transStalkDirection = computed((): number => {
     return {R: 0, N: 1, D: 2}[transDirection.value];
 });
 
-// TODO
+function transStalkDirectionInc() {
+    switch (transDirection.value) {
+        case "R":
+            gameSocket.pressInput("gear0");
+            break;
+        case "N":
+            gameSocket.pressInput("geardrive");
+            break;
+    }
+}
+
+function transStalkDirectionDec() {
+    switch (transDirection.value) {
+        case "D":
+            gameSocket.pressInput("gear0");
+            break;
+        case "N":
+            gameSocket.pressInput("gearreverse");
+            break;
+    }
+}
 
 //-----------------------------------------------------------------------------
 // Transmission mode logic
@@ -562,7 +538,144 @@ const transStalkMode = computed((): number => {
     return {M: 0, A: 1}[transMode.value];
 });
 
-// TODO
+function transStalkModeInc() {
+    if (transMode.value == "M") {
+        gameSocket.pressInput("transemi");
+    }
+}
+
+function transStalkModeDec() {
+    if (transMode.value == "A") {
+        gameSocket.pressInput("transemi");
+    }
+}
+
+//-----------------------------------------------------------------------------
+// Gear shifting logic
+//-----------------------------------------------------------------------------
+
+// Transmission positive gear index, ignoring neutral.
+const transGearIndex = computed(() => {
+    return Math.max(1, Math.abs(telemetryState.unpaused.transmission.indicatedGear ?? 0));
+});
+
+// Map the control inputs directly to the game, i.e. don't try to model
+// semi-automatic transmission controls.
+let transStalkGearCfgMode: "semi" | "directWithHints" | "fullDirect" | "disabled" = "semi";
+
+function transStalkGearSyncCfg(configuration: ConfigurationData) {
+    transStalkGearCfgMode = configuration.stalkTransStalkMode;
+}
+
+// Gear shift stalk position. Just for visual feedback.
+const transStalkGear = ref(0);
+
+// Timer for returning the stalk to its center position.
+let transStalkGearTimer: number | undefined = undefined;
+
+function transStalkGearStartTimer() {
+    if (transStalkGearTimer !== undefined) {
+        window.clearTimeout(transStalkGearTimer);
+    }
+    transStalkGearTimer = window.setTimeout(() => {
+        transStalkGear.value = 0;
+        transStalkGearTimer = undefined;
+    }, 300);
+}
+
+function transStalkGearAdj(dir: "up" | "down") {
+    if (transStalkGearCfgMode == "disabled") return;
+
+    transStalkGear.value = dir == "up" ? 1 : -1;
+    transStalkGearStartTimer();
+
+    switch (transStalkGearCfgMode) {
+        case "directWithHints":
+            // Use hints only when the truck is moving, otherwise it's
+            // impossible to switch between R/N/D.
+            if (transMode.value == "A" && Math.abs(telemetryState.unpaused.axles.speed ?? 0) >= 10) {
+                gameSocket.pressInput(`gear${dir}hint`);
+                break;
+            }
+            // fallthrough
+        case "fullDirect":
+            gameSocket.pressInput(`gear${dir}`);
+            break;
+        case "semi":
+            if (transDirection.value == "N") break;
+
+            // Don't shift (or hint) below first gear. Hinting below first gear
+            // seems to overflow an internal counter!
+            if (dir == "down" && transGearIndex.value <= 1) break;
+
+            // Swap direction if in reverse, to convert to the game's
+            // sequential gearbox inputs.
+            if (transDirection.value == "R") {
+                // @ts-ignore
+                dir = {up: "down", down: "up"}[dir];
+            }
+
+            // Always use hints when in automatic mode, since R/N/D is
+            // controlled via a separate switch.
+            if (transMode.value == "A") {
+                gameSocket.pressInput(`gear${dir}hint`);
+            } else {
+                gameSocket.pressInput(`gear${dir}`);
+            }
+            break;
+    }
+}
+
+//-----------------------------------------------------------------------------
+// Engine brake and retarder logic
+//-----------------------------------------------------------------------------
+
+// Configures which game input the brake lever is mapped to.
+let transStalkBrakeCfgMode: "auto" | "retarder" | "engine" = "auto";
+
+function transStalkBrakeSyncCfg(configuration: ConfigurationData) {
+    transStalkBrakeCfgMode = configuration.stalkBrakingMode;
+}
+
+// Retarder stalk position. Just for visual feedback.
+const transStalkBrake = ref(0);
+
+// Timer for returning the stalk to its center position.
+let transStalkBrakeTimer: number | undefined = undefined;
+
+function transStalkBrakeStartTimer() {
+    if (transStalkBrakeTimer !== undefined) {
+        window.clearTimeout(transStalkBrakeTimer);
+    }
+    transStalkBrakeTimer = window.setTimeout(() => {
+        transStalkBrake.value = 0;
+        transStalkBrakeTimer = undefined;
+    }, 300);
+}
+
+function transStalkBrakeAdj(dir: "inc" | "dec") {
+    let mapToRetarder: boolean;
+    let feedback = true;
+    if (transStalkBrakeCfgMode == "retarder") {
+        mapToRetarder = true;
+        feedback = (telemetryState.unpaused.brake.retarderMax ?? 0) > 0;
+    } else if (transStalkBrakeCfgMode == "engine") {
+        mapToRetarder = false;
+    } else {
+        mapToRetarder = (telemetryState.unpaused.brake.retarderMax ?? 0) > 0;
+    }
+
+    if (feedback) {
+        transStalkBrake.value = dir == "inc" ? 1 : -1;
+        transStalkBrakeStartTimer();
+    }
+
+    if (mapToRetarder) {
+        gameSocket.pressInput(dir == "inc" ? "retarderup" : "retarderdown");
+    } else {
+        gameSocket.pressInput(dir == "inc" ? "engbrakeup" : "engbrakedwn");
+    }
+}
 
 //-----------------------------------------------------------------------------
 // Input demultiplexing
@@ -587,10 +700,18 @@ function sendToGame(input: GameInput) {
         case "lowBeam-dec": utilStalkLowBeamDec(); break;
         case "highBeam-inc": utilStalkHighBeamInc(); break;
         case "highBeam-dec": utilStalkHighBeamDec(); break;
-        case "blinkers-inc": utilStalkBlinkersLeft(); break;
-        case "blinkers-dec": utilStalkBlinkersRight(); break;
+        case "blinkers-inc": utilStalkBlinkersAdj("left"); break;
+        case "blinkers-dec": utilStalkBlinkersAdj("right"); break;
         case "wipers-inc": utilStalkWipersInc(); break;
         case "wipers-dec": utilStalkWipersDec(); break;
+        case "transGear-inc": transStalkGearAdj("up"); break;
+        case "transGear-dec": transStalkGearAdj("down"); break;
+        case "transBrake-inc": transStalkBrakeAdj("inc"); break;
+        case "transBrake-dec": transStalkBrakeAdj("dec"); break;
+        case "transDirection-inc": transStalkDirectionInc(); break;
+        case "transDirection-dec": transStalkDirectionDec(); break;
+        case "transMode-inc": transStalkModeInc(); break;
+        case "transMode-dec": transStalkModeDec(); break;
     }
 }
 
@@ -598,6 +719,8 @@ function syncControlBehaviorConfig(configuration: ConfigurationData) {
     utilStalkLowBeamSyncCfg(configuration);
     utilStalkHighBeamSyncCfg(configuration);
     utilStalkBlinkersSyncCfg(configuration);
+    transStalkGearSyncCfg(configuration);
+    transStalkBrakeSyncCfg(configuration);
 }
 
 //-----------------------------------------------------------------------------
@@ -634,7 +757,7 @@ export function useGame(configuration: Configuration): { gameState: GameState, s
                 transGearIndex,
                 transStalkMode,
                 transStalkDirection,
-                transStalkShift,
+                transStalkShift: transStalkGear,
                 transStalkBrake,
                 utilStalkLowBeam,
                 utilStalkHighBeam,

@@ -100,6 +100,10 @@ export function useGestureControls(
                 inc: "automatic transmission",
                 dec: "manual transmission",
             },
+            unmapped: {
+                inc: "not mapped",
+                dec: "not mapped",
+            }
         }[action[0]][action[1]];
     }
 

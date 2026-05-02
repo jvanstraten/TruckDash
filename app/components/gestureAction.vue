@@ -47,6 +47,10 @@ function describeActionWithIcons(action: ControlAction): string[] {
       inc: ["cog-box", "alpha-a"],
       dec: ["cog-box", "alpha-m"],
     },
+    unmapped: {
+      inc: [],
+      dec: [],
+    }
   }[action[0]][action[1]];
 }
 

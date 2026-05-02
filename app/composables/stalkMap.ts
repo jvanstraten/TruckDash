@@ -6,7 +6,8 @@ export type StalkAxisType   // default down/inward <--> up/outward
     | "transGear"           // (Gear down), no-op, (gear up)
     | "transBrake"          // (Brake reduce), no-op, (brake increase)
     | "transDirection"      // Reverse, neutral, drive
-    | "transMode";          // Manual, automatic
+    | "transMode"           // Manual, automatic
+    | "unmapped";           // No control action
 
 export type StalkAxis = {
     type: StalkAxisType;
@@ -38,10 +39,22 @@ export function useStalkMap(configuration: Configuration) : StalkMap {
 
     function getTransStalkAxes(): StalkAxes {
         const config = configuration.value;
-        const transBrake: StalkAxis = { type: "transBrake", invert: config.stalkInvertTransBrake };
-        const transGear: StalkAxis = { type: "transGear", invert: config.stalkInvertTransGear };
-        const transMode: StalkAxis = { type: "transMode", invert: config.stalkInvertTransMode };
-        const transDirection: StalkAxis = { type: "transDirection", invert: config.stalkInvertTransDirection };
+        const transBrake: StalkAxis = {
+            type: "transBrake",
+            invert: config.stalkInvertTransBrake
+        };
+        const transGear: StalkAxis = {
+            type: config.stalkTransStalkMode != "disabled" ? "transGear" : "unmapped",
+            invert: config.stalkInvertTransGear
+        };
+        const transMode: StalkAxis = {
+            type: config.stalkTransStalkMode != "disabled" ? "transMode" : "unmapped",
+            invert: config.stalkInvertTransMode
+        };
+        const transDirection: StalkAxis = {
+            type: config.stalkTransStalkMode == "semi" ? "transDirection" : "unmapped",
+            invert: config.stalkInvertTransDirection
+        };
 
         return {
             moveX: config.stalkSwapGearBrake ? transGear : transBrake,

@@ -75,12 +75,14 @@ export type ConfigurationData = {
     stalkBlinkersMomentaryCount: number,
     stalkBlinkersAutoOffSensitivity: number,
     stalkInvertWipers: boolean,
-    stalkSwapGearBrake: boolean,
+    stalkTransStalkMode: "semi" | "directWithHints" | "fullDirect" | "disabled",
     stalkInvertTransGear: boolean,
-    stalkInvertTransBrake: boolean,
-    stalkSwapModeDirection: boolean,
     stalkInvertTransDirection: boolean,
     stalkInvertTransMode: boolean,
+    stalkSwapModeDirection: boolean,
+    stalkBrakingMode: "auto" | "retarder" | "engine"
+    stalkInvertTransBrake: boolean,
+    stalkSwapGearBrake: boolean,
 };
 
 export type Configuration = RemovableRef<ConfigurationData>;
@@ -171,12 +173,14 @@ export function useConfiguration(): {
         stalkBlinkersMomentaryCount: 3,
         stalkBlinkersAutoOffSensitivity: 20,
         stalkInvertWipers: false,
+        stalkTransStalkMode: "semi",
         stalkInvertTransGear: false,
-        stalkInvertTransBrake: false,
-        stalkInvertTransMode: false,
         stalkInvertTransDirection: false,
-        stalkSwapGearBrake: false,
+        stalkInvertTransMode: false,
         stalkSwapModeDirection: false,
+        stalkBrakingMode: "auto",
+        stalkInvertTransBrake: false,
+        stalkSwapGearBrake: false,
 
     };
 
