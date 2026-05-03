@@ -1,6 +1,5 @@
-transmission stalk swipe controls
-fix gestures because holy fucking shit this ain't it
-control stalk design
+collapse control UI when some switch axes are unused so they don't look so derpy in that case
+weak dashboard backlight when power is on but lights aren't
 truck config quick action menu (power, trailer hook, diff lock, lift axle x2)
 panel for the above
 aux lights panel

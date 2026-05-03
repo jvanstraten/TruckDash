@@ -1,13 +1,23 @@
 <script setup lang="ts">
 
-import { useGlobals } from "~/composables/game";
-import { useInstruments } from "~/composables/instruments";
-import { useShading } from "~/composables/shading";
-import { design } from "~/data/design";
+import type { ConfigurationData } from "~/composables/configuration";
+import type { StalkMap } from "~/composables/stalkMap";
+import type { Instruments } from "~/composables/instruments";
+import type { Shading } from "~/composables/shading";
 
-const { configuration, gameState } = useGlobals();
-const { instruments } = useInstruments(gameState, configuration);
-const { shading } = useShading(gameState, instruments, configuration);
+const {
+  side,
+  configuration,
+  stalkMap,
+  instruments,
+  shading,
+} = defineProps<{
+  side: "left" | "right";
+  configuration: ConfigurationData,
+  stalkMap: StalkMap,
+  instruments: Instruments,
+  shading: Shading,
+}>();
 
 </script>
 
@@ -75,6 +85,5 @@ const { shading } = useShading(gameState, instruments, configuration);
   grid-template-columns: repeat(32, 1fr);
   grid-template-rows: repeat(12, 1fr);
 }
-
 
 </style>

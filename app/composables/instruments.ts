@@ -5,9 +5,7 @@ import type { Configuration } from "~/composables/configuration";
 import type { NeedleConfig } from "~/types/design";
 
 export type Instruments = {
-    backlight: globalThis.ComputedRef<number>,
     displays: {
-        brightness: globalThis.ComputedRef<number>,
         clock: globalThis.ComputedRef<string>,
         deadline: globalThis.ComputedRef<string>,
         eta: globalThis.ComputedRef<string>,
@@ -19,7 +17,6 @@ export type Instruments = {
         retarder: globalThis.ComputedRef<string>,
     },
     indicators: {
-        brightness: globalThis.ComputedRef<number>,
         adBlue: globalThis.ComputedRef<boolean>,
         air: globalThis.ComputedRef<boolean>,
         airbag: globalThis.ComputedRef<boolean>,
@@ -213,15 +210,7 @@ export function useInstruments(gameState: GameState, configuration: Configuratio
     };
 
     const instruments: Instruments = {
-        backlight: computed(() => {
-            if (gameState.unpaused.lights.low || gameState.unpaused.lights.parking) return 1.0;
-            return 0.0;
-        }),
         displays: {
-            brightness: computed((): number => {
-                if (!gameState.unpaused.electric.enabled) return 0.0;
-                return 1.0;
-            }),
             clock: computed((): string => {
                 const config = configuration.value;
                 let time = gameState.unpaused.time.current;
@@ -305,9 +294,6 @@ export function useInstruments(gameState: GameState, configuration: Configuratio
             }),
         },
         indicators: {
-            brightness: computed((): number => {
-                return 1.0;
-            }),
             adBlue: computed((): boolean => {
                 if (!gameState.unpaused.electric.enabled) return false;
                 if (systemChecks.adBlue.value) return true;
@@ -381,6 +367,7 @@ export function useInstruments(gameState: GameState, configuration: Configuratio
                 return gameState.current.paused === true;
             }),
             highBeam: computed((): boolean => {
+                if (gameState.derived.highBeamIndicatorOverride.value) return true;
                 if (!gameState.unpaused.electric.enabled) return false;
                 if (systemChecks.lamps.value) return true;
                 if (!gameState.unpaused.lights.low) return false;

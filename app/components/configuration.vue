@@ -203,6 +203,16 @@ const chosenFile = ref();
             subtitle="Enables the instrument cluster component."
             v-model="configuration.layoutInstrumentsEnabled"
         />
+        <configBool
+            title="Left control stalk"
+            subtitle="Shows a rendition of the left control stalk. Note: rather than pressing the switches or dragging the handles, use swipe actions!"
+            v-model="configuration.layoutLeftStalkEnabled"
+        />
+        <configBool
+            title="Right control stalk"
+            subtitle="Shows a rendition of the right control stalk. Note: rather than pressing the switches or dragging the handles, use swipe actions!"
+            v-model="configuration.layoutRightStalkEnabled"
+        />
         <configDisplay
             :title="'Display A'"
             subtitle="Nests a web app from another mod like TruckDash into the page, as if it's an infotainment display."
@@ -470,13 +480,13 @@ const chosenFile = ref();
         />
         <configBool
             title="Invert direction"
-            :subtitle="'Swipe ' + (configuration.stalkSwapModeDirection ? 'down instead of up' : 'inboard instead of outboard') + ' to move toward forward drive (and vice versa).'"
+            :subtitle="'Swipe ' + (configuration.stalkSwapModeDirection ? 'inboard instead of outboard' : 'down instead of up') + ' to move toward forward drive (and vice versa).'"
             v-model="configuration.stalkInvertTransDirection"
             :enabled="configuration.stalkTransStalkMode == 'semi'"
         />
         <configBool
             title="Invert transmission mode"
-            :subtitle="'Swipe ' + (configuration.stalkSwapModeDirection ? 'inboard instead of outboard' : 'down instead of up') + ' to enable automatic transmission.'"
+            :subtitle="'Swipe ' + (configuration.stalkSwapModeDirection ? 'down instead of up' : 'inboard instead of outboard') + ' to enable automatic transmission.'"
             v-model="configuration.stalkInvertTransMode"
             :enabled="configuration.stalkTransStalkMode != 'disabled'"
         />
@@ -785,6 +795,11 @@ const chosenFile = ref();
             title="Indicator animations"
             subtitle="Whether to fade indicators in and out. Gives a lightbulb-like effect. This is done via CSS, and is therefore always done at the browser's framerate."
             v-model="configuration.perfAnimateIndicators"
+        />
+        <configBool
+            title="Control stalk animations"
+            subtitle="Whether to smooth out control stalk and switch movement. This is done via CSS, and is therefore always done at the browser's framerate."
+            v-model="configuration.perfAnimateStalks"
         />
         <configBool
             title="Bloom"

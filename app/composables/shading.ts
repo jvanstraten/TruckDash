@@ -5,15 +5,15 @@ import type { GameState } from "~/composables/game";
 import type { Instruments } from "~/composables/instruments";
 
 export type IndicatorStyles = {
-    on: any,
-    off: any,
+    on: object,
+    off: object,
 };
 
 export type AllStyles = {
-    diffuse: any,
-    emission: any,
-    combined: any,
-    needle: any,
+    diffuse: object,
+    emission: object,
+    combined: object,
+    needle: object,
     indicator: IndicatorStyles,
     divIndicator: IndicatorStyles,
 };
@@ -21,6 +21,8 @@ export type AllStyles = {
 export type Shading = {
     background: string,
     lowerBackground: string,
+    stalkBackground: string,
+    weaklyBacklit: AllStyles,
     primary: AllStyles,
     secondary: AllStyles,
     display: AllStyles,
@@ -41,7 +43,7 @@ export type Shading = {
     }
 };
 
-export function useShading(gameState: GameState, instruments: Instruments, configuration: Configuration): {shading: ComputedRef<Shading>} {
+export function useShading(gameState: GameState, configuration: Configuration): {shading: ComputedRef<Shading>} {
 
     const sunCalc = new SunCalc();
 
@@ -106,9 +108,9 @@ export function useShading(gameState: GameState, instruments: Instruments, confi
 
     function computeColors(): Shading {
         const amb_lvl = ambientLevel.value;
-        const bl_lvl = instruments.backlight.value;
-        const disp_lvl = instruments.displays.brightness.value;
-        const ind_lvl = instruments.indicators.brightness.value;
+        const bl_lvl = gameState.derived.backlight.value;
+        const disp_lvl = gameState.derived.displayBrightness.value;
+        const ind_lvl = gameState.derived.indicatorBrightness.value;
         const cfg = configuration.value;
 
         // Ambient light color. White at max brightness, orange-y when dimmed.
@@ -163,6 +165,7 @@ export function useShading(gameState: GameState, instruments: Instruments, confi
                 },
                 combined: {
                     fill: combined.toHex(),
+                    color: combined.toHex(), // for non-SVG markings
                     filter: glowFilter,
                 },
                 needle: {
@@ -207,6 +210,7 @@ export function useShading(gameState: GameState, instruments: Instruments, confi
         const c_grn = new Color(cfg.themeIndicatorGreen);
         const c_blu = new Color(cfg.themeIndicatorBlue);
 
+        const weaklyBacklit = shade(c_prim, multiplyColors(c_prim, c_bl), bl_lvl * 0.5, 0.9);
         const primary = shade(c_prim, multiplyColors(c_prim, c_bl), bl_lvl, 0.9);
         const secondary = shade(c_sec, multiplyColors(c_sec, c_bl), bl_lvl, 0.9);
         const needle = shade(c_ndl, multiplyColors(c_ndl, c_nbl), bl_lvl, 0.9);
@@ -224,13 +228,18 @@ export function useShading(gameState: GameState, instruments: Instruments, confi
             lowerBackground = lowerBackground.adjustLightness(-3);
         }
 
+        // The stalks need a lighter color, especially when shading is enabled.
+        const stalkBackground = lowerBackground.adjustLightness(10 * amb_lvl);
+
         return {
             background: background.toHex(),
             lowerBackground: lowerBackground.toHex(),
-            primary: primary,
-            secondary: secondary,
-            display: display,
-            needle: needle,
+            stalkBackground: stalkBackground.toHex(),
+            weaklyBacklit,
+            primary,
+            secondary,
+            display,
+            needle,
             indicator: {
                 red: indicator_red.indicator,
                 amber: indicator_amber.indicator,

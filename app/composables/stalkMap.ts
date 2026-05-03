@@ -1,13 +1,6 @@
-export type StalkAxisType   // default down/inward <--> up/outward
-    = "lowBeam"             // Off, park, low beams
-    | "highBeam"            // (Flash), off, high beams
-    | "blinkers"            // Left, (left), off, (right), right
-    | "wipers"              // Off, intermittent, low, high
-    | "transGear"           // (Gear down), no-op, (gear up)
-    | "transBrake"          // (Brake reduce), no-op, (brake increase)
-    | "transDirection"      // Reverse, neutral, drive
-    | "transMode"           // Manual, automatic
-    | "unmapped";           // No control action
+export type StalkAxisType = "lowBeam" | "blinkers" | "wipers"
+    | "highBeam" | "highBeamCenterHorn" | "highBeamReverseHorn"
+    | "transGear" | "transBrake" | "transDirection" | "transMode" | "unmapped";
 
 export type StalkAxis = {
     type: StalkAxisType;
@@ -26,11 +19,32 @@ export type StalkMap = {
     right: ComputedRef<StalkAxes>,
 };
 
+export function getAxisRange(axis: StalkAxisType): [number, number] {
+    switch (axis) {
+        case "lowBeam": return [0, 2];
+        case "blinkers": return [-1, 1];
+        case "wipers": return [0, 3]
+        case "highBeam": return [0, 1];
+        case "highBeamCenterHorn": return [0, 2];
+        case "highBeamReverseHorn": return [-1, 1];
+        case "transGear": return [-1, 1];
+        case "transBrake": return [-1, 1];
+        case "transDirection": return [-1, 1];
+        case "transMode": return [0, 1];
+        case "unmapped": return [0, 0];
+    }
+}
+
 export function useStalkMap(configuration: Configuration) : StalkMap {
     function getUtilityStalkAxes(): StalkAxes {
         const config = configuration.value;
+        let highBeamType: "highBeam" | "highBeamCenterHorn" | "highBeamReverseHorn" = "highBeam";
+        switch (config.stalkLightHornMode) {
+            case "reverse": highBeamType = "highBeamReverseHorn"; break;
+            case "middle": highBeamType = "highBeamCenterHorn"; break;
+        }
         return {
-            moveX: { type: "highBeam", invert: config.stalkInvertHighBeam },
+            moveX: { type: highBeamType, invert: config.stalkInvertHighBeam },
             moveY: { type: "blinkers", invert: config.stalkSwap == "lhd" },
             swX: { type: "lowBeam", invert: config.stalkInvertLowBeam },
             swY: { type: "wipers", invert: config.stalkInvertWipers },
@@ -55,7 +69,6 @@ export function useStalkMap(configuration: Configuration) : StalkMap {
             type: config.stalkTransStalkMode == "semi" ? "transDirection" : "unmapped",
             invert: config.stalkInvertTransDirection
         };
-
         return {
             moveX: config.stalkSwapGearBrake ? transGear : transBrake,
             moveY: config.stalkSwapGearBrake ? transBrake : transGear,

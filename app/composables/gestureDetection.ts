@@ -106,6 +106,9 @@ export function useGestureDetection(
     }
 
     function onPointerDown(event: PointerEvent) {
+        // Ignore anything except left mouse button.
+        if (event.button != 0) return;
+
         event.stopPropagation();
         event.preventDefault();
         const target = event.target as HTMLElement;

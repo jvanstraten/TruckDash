@@ -23,6 +23,14 @@ function describeActionWithIcons(action: ControlAction): string[] {
       inc: ["car-light-high", "numeric-1"],
       dec: ["car-light-high", "numeric-0"],
     },
+    highBeamCenterHorn: {
+      inc: ["car-light-high", "numeric-1"],
+      dec: ["car-light-high", "numeric-0"],
+    },
+    highBeamReverseHorn: {
+      inc: ["car-light-high", "numeric-1"],
+      dec: ["car-light-high", "numeric-0"],
+    },
     blinkers: {
       inc: ["arrow-left-bold"],
       dec: ["arrow-right-bold"],

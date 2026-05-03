@@ -2,9 +2,9 @@
 
 import { design } from "~/data/design";
 
-import type { ConfigurationData } from "~/types/globals";
-import type { Instruments } from "~/types/instruments";
-import type { Shading } from "~/types/shading";
+import type { ConfigurationData } from "~/composables/configuration";
+import type { Instruments } from "~/composables/instruments";
+import type { Shading } from "~/composables/shading";
 
 const {
   configuration,

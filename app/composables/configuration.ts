@@ -35,6 +35,7 @@ export type ConfigurationData = {
     perfAnimateNeedles: boolean,
     perfNeedleDetails: boolean,
     perfAnimateIndicators: boolean,
+    perfAnimateStalks: boolean,
     perfBloom: boolean,
     perfShadows: boolean,
 
@@ -56,6 +57,10 @@ export type ConfigurationData = {
 
     layoutInstrumentsEnabled: boolean,
     layoutInstrumentsPosition: UiPosition,
+    layoutLeftStalkEnabled: boolean,
+    layoutLeftStalkPosition: UiPosition,
+    layoutRightStalkEnabled: boolean,
+    layoutRightStalkPosition: UiPosition,
     layoutDisplay1Address: string,
     layoutDisplay1Position: UiPosition,
     layoutDisplay1Zoom: number,
@@ -91,8 +96,8 @@ export type DefaultLayoutData = {
     title: string,
     subtitle: string,
     instrumentsPosition?: UiPosition;
-    display1Position?: UiPosition;
-    display2Position?: UiPosition;
+    leftStalkPosition?: UiPosition;
+    rightStalkPosition?: UiPosition;
 };
 
 export function useConfiguration(): {
@@ -130,6 +135,7 @@ export function useConfiguration(): {
         perfAnimateNeedles: true,
         perfNeedleDetails: true,
         perfAnimateIndicators: false,
+        perfAnimateStalks: true,
         perfBloom: false,
         perfShadows: true,
 
@@ -153,6 +159,10 @@ export function useConfiguration(): {
         // Layout configuration.
         layoutInstrumentsEnabled: true,
         layoutInstrumentsPosition: { x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0 },
+        layoutLeftStalkEnabled: false,
+        layoutLeftStalkPosition: { x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0 },
+        layoutRightStalkEnabled: false,
+        layoutRightStalkPosition: { x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0 },
         layoutDisplay1Address: "",
         layoutDisplay1Position: { x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0 },
         layoutDisplay1Zoom: 0,

@@ -76,6 +76,14 @@ export function useGestureControls(
                 inc: "turn on high beams",
                 dec: "turn off high beams",
             },
+            highBeamCenterHorn: {
+                inc: "turn on high beams",
+                dec: "turn off high beams",
+            },
+            highBeamReverseHorn: {
+                inc: "turn on high beams",
+                dec: "flash high beams",
+            },
             blinkers: {
                 inc: "enable left blinkers",
                 dec: "enable right blinkers",

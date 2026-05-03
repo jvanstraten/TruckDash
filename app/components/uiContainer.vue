@@ -5,8 +5,12 @@ import type {UiPosition} from "~/types/globals";
 const uiConfig = defineModel<UiPosition>();
 
 const props = defineProps<{
-  adjust: boolean
-  aspect?: number
+  adjust: boolean,
+  aspect?: number,
+  minAspect?: number,
+  maxAspect?: number,
+  alignX?: number,
+  alignY?: number,
 }>();
 
 type Coordinate = {
@@ -142,6 +146,8 @@ const fullCoords = computed(() => {
   };
 });
 
+const actualAspect = ref<number>(1);
+
 const clientCoords = computed(() => {
   if (!uiConfig.value) return {};
   let left = Math.min(uiConfig.value.x1, uiConfig.value.x2);
@@ -149,7 +155,7 @@ const clientCoords = computed(() => {
   let width = Math.abs(uiConfig.value.x1 - uiConfig.value.x2);
   let height = Math.abs(uiConfig.value.y1 - uiConfig.value.y2);
 
-  if (props.aspect !== undefined && windowSize.value !== undefined) {
+  if (windowSize.value !== undefined) {
     const windowWidth = windowSize.value.x;
     const windowHeight = windowSize.value.y;
 
@@ -158,16 +164,24 @@ const clientCoords = computed(() => {
     width *= windowWidth;
     height *= windowHeight;
 
-    const desiredAspectRatio = props.aspect;
+    const minAspectRatio = props.aspect ?? props.minAspect ?? 0.001;
+    const maxAspectRatio = props.aspect ?? props.maxAspect ?? 1000;
+
     const currentAspectRatio = width / height;
+    const desiredAspectRatio = Math.min(Math.max(minAspectRatio, currentAspectRatio), maxAspectRatio);
+
     if (currentAspectRatio < desiredAspectRatio) {
       const reducedHeight = width / desiredAspectRatio;
-      top += (height - reducedHeight) / 2;
+      top += (height - reducedHeight) * (props.alignY ?? 0.5);
       height = reducedHeight;
     } else {
       const reducedWidth = height * desiredAspectRatio;
-      left += (width - reducedWidth) / 2;
+      left += (width - reducedWidth) * (props.alignX ?? 0.5);
       width = reducedWidth;
+    }
+
+    if (height > 0) {
+      actualAspect.value = width / height;
     }
 
     left /= windowWidth;
@@ -204,7 +218,9 @@ const cp2Coords = computed(() => {
 
 <template>
 
-  <div class="uic-content" :style="clientCoords"><slot/></div>
+  <div class="uic-content" :style="clientCoords">
+    <slot :aspect="actualAspect"/>
+  </div>
   <div
       v-if="props.adjust"
       class="uic-border"

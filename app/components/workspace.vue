@@ -2,7 +2,9 @@
 
 import uiContainer from "~/components/uiContainer.vue";
 import instrumentCluster from "~/components/instrumentCluster.vue";
+import controlStalk from "~/components/controlStalk.vue";
 import gestureInputMap from "~/components/gestureInputMap.vue";
+import display from "~/components/display.vue";
 
 import { useConfiguration } from "~/composables/configuration";
 import { useGame } from "~/composables/game";
@@ -39,7 +41,7 @@ const { gameState, sendToGame } = useGame(configuration);
 const { instruments } = useInstruments(gameState, configuration);
 
 // Use shading logic.
-const { shading } = useShading(gameState, instruments, configuration);
+const { shading } = useShading(gameState, configuration);
 
 // Use gesture controls. When the input mapping display is activated by the
 // user, we push decoded gesture information into a snackbar queue to also
@@ -53,8 +55,7 @@ const onGestureDecoded = computed(() => {
 });
 const { decodeGesture, gestureMapping } = useGestureControls(configuration, stalkMap, onGestureDecoded);
 
-
-
+// Toplevel gesture routing.
 function onGesture(data: GestureData) {
 
   // Override all gesture behavior if the UI is being adjusted.
@@ -81,13 +82,19 @@ function onGesture(data: GestureData) {
   if (action === undefined) return;
   if (action === "layer") return;
 
-  const [axis, dir] = action;
+  let [axis, dir] = action;
+  if (axis === "unmapped") return;
+  if (axis === "highBeamReverseHorn") axis = "highBeam";
+  if (axis === "highBeamCenterHorn") axis = "highBeam";
   sendToGame(`${axis}-${dir}`);
 }
 
+const enableGestureDebugging: boolean = false;
+
 const gestureDebug = ref<string>("...");
 const gestureDebugHistory = ref<string[]>([]);
-const gestures = useGestureDetection(onGesture, {}, gestureDebug);
+const gestures = useGestureDetection(
+    onGesture, {}, enableGestureDebugging ? gestureDebug : undefined);
 
 watch(gestureDebug, () => {
   if (gestureDebugHistory.value.length > 50) gestureHistory.value.splice(0);
@@ -115,6 +122,46 @@ watch(gestureDebug, () => {
       <instrumentCluster
           :configuration="configuration"
           :instruments="instruments"
+          :shading="shading"
+      />
+    </uiContainer>
+
+    <uiContainer
+        :adjust="adjust"
+        v-if="configuration.layoutLeftStalkEnabled"
+        v-model="configuration.layoutLeftStalkPosition"
+        :minAspect="1.5"
+        :maxAspect="3"
+        :alignX="0"
+        v-slot:default="{ aspect }"
+    >
+      <controlStalk
+          side="left"
+          :aspect="aspect"
+          :uiAdjust="adjust"
+          :configuration="configuration"
+          :stalkMap="stalkMap"
+          :gameState="gameState"
+          :shading="shading"
+      />
+    </uiContainer>
+
+    <uiContainer
+        :adjust="adjust"
+        v-if="configuration.layoutRightStalkEnabled"
+        v-model="configuration.layoutRightStalkPosition"
+        :minAspect="1.5"
+        :maxAspect="3"
+        :alignX="1"
+        v-slot:default="{ aspect }"
+    >
+      <controlStalk
+          side="right"
+          :aspect="aspect"
+          :uiAdjust="adjust"
+          :configuration="configuration"
+          :stalkMap="stalkMap"
+          :gameState="gameState"
           :shading="shading"
       />
     </uiContainer>
@@ -155,7 +202,7 @@ watch(gestureDebug, () => {
         :total-visible="10"
     />
 
-    <div v-if="false" style="position: absolute; left: 0; bottom: 0">
+    <div v-if="enableGestureDebugging" style="position: absolute; left: 0; bottom: 0">
       <div v-for="message in gestureDebugHistory">{{message}}</div>
     </div>
 
