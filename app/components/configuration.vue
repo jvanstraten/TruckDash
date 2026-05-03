@@ -807,8 +807,8 @@ const chosenFile = ref();
             v-model="configuration.perfBloom"
         />
         <configBool
-            title="Shadows"
-            subtitle="Whether to render shadows of needles and the insets in the instrument cluster."
+            title="Ambient occlusion"
+            subtitle="Whether to add some basic ambient occlusion and shading effects. Note that it's all faked with CSS shadow effects and gradients -- there is no 3D rendering here -- but it's better than nothing IMO."
             v-model="configuration.perfShadows"
         />
       </v-list>

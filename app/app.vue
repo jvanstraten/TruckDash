@@ -1,30 +1,21 @@
 <script setup lang="ts">
 
 import { useFullscreen } from '@vueuse/core'
+import { NoSleep } from '~/lib/nosleep'
 import workspace from "~/components/workspace.vue";
 import configuration from "~/components/configuration.vue";
 
-const fullscreen = useFullscreen()
-let wakeLock: WakeLockSentinel | null = null;
+const fullscreen = useFullscreen();
+let noSleep: NoSleep | null = null;
 
 async function toggleFullscreen() {
   if (fullscreen.isFullscreen.value) {
+    if (noSleep !== null) noSleep.disable();
     await fullscreen.exit();
-    if (wakeLock !== null) {
-      await wakeLock.release();
-      wakeLock = null;
-    }
   } else {
+    if (noSleep === null) noSleep = new NoSleep();
+    noSleep.enable();
     await fullscreen.enter();
-
-    // Not that this is gonna work, because clearly it's NoT sAfE to keep a
-    // screen on UNLESS the javascript requesting it was encrypted with a key
-    // that has the seal of approval from a hostile foreign government's
-    // certificate authority. See also:
-    // https://www.youtube.com/watch?v=M1si1y5lvkk
-    if (navigator && "wakeLock" in navigator) {
-      wakeLock = await navigator.wakeLock.request("screen");
-    }
   }
 }
 

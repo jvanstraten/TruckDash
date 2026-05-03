@@ -188,14 +188,23 @@ const bodyStyle = computed(() => {
   return style;
 });
 
-const markingStyle = computed(() => {
+type RenderLayer = "diffuse" | "emission" | "combined";
+
+function getMarkingStyle(layer: RenderLayer) {
   let style = {};
-  Object.assign(style, shading.weaklyBacklit.combined);
-  if (gameState.derived.backlight.value > 0.5) {
-    Object.assign(style, {zIndex: 2});
+  let z = 0;
+  switch (layer) {
+    case "diffuse": Object.assign(style, shading.integrated.diffuse); z = 0; break;
+    case "emission": Object.assign(style, shading.integrated.emission); z = 2; break;
+    case "combined": Object.assign(style, shading.integrated.combined); z = 2; break;
   }
+  Object.assign(style, {zIndex: z});
   return style;
-})
+}
+
+function getRenderLayers(): RenderLayer[] {
+  return ['diffuse', 'emission'];
+}
 
 const ySwitchSeamStyle = computed(() => {
   const width = Math.abs(transformCoordinates(0, 0).x);
@@ -262,7 +271,7 @@ function shadedClasses(cls: string) {
 <template>
   <div :class="classes('container')">
     <div :class="classes('body')" :style="bodyStyle">
-      <div class="stalk-group" :style="markingStyle">
+      <div v-for="layer in getRenderLayers()" class="stalk-group" :style="getMarkingStyle(layer)">
         <div v-if="axes.moveX.type != 'unmapped'" class="stalk-group">
           <controlStalkAxisIcon
               :class="classes('positioned')"
@@ -352,7 +361,12 @@ function shadedClasses(cls: string) {
             :class="shadedClasses('switch-body')"
             :style="SwitchBodyStyle()"
         >
-          <v-icon size="4cqw" :style="markingStyle">mdi-dots-vertical</v-icon>
+          <v-icon
+              v-for="layer in getRenderLayers()"
+              class="stalk-switch-body-icon"
+              :style="getMarkingStyle(layer)"
+              size="4cqw"
+          >mdi-dots-vertical</v-icon>
           <div v-if="configuration.perfShadows" class="stalk-switch-grip"/>
         </div>
       </div>
@@ -479,6 +493,13 @@ function shadedClasses(cls: string) {
 
 .stalk-switch-body-unshaded {
   border: 0.2cqw solid #000;
+}
+
+.stalk-switch-body-icon {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
 }
 
 .stalk-switch-grip {

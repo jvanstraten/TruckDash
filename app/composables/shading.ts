@@ -22,7 +22,7 @@ export type Shading = {
     background: string,
     lowerBackground: string,
     stalkBackground: string,
-    weaklyBacklit: AllStyles,
+    integrated: AllStyles,
     primary: AllStyles,
     secondary: AllStyles,
     display: AllStyles,
@@ -108,9 +108,10 @@ export function useShading(gameState: GameState, configuration: Configuration): 
 
     function computeColors(): Shading {
         const amb_lvl = ambientLevel.value;
-        const bl_lvl = gameState.derived.backlight.value;
+        const bl_lvl = gameState.derived.backlightBrightness.value;
         const disp_lvl = gameState.derived.displayBrightness.value;
         const ind_lvl = gameState.derived.indicatorBrightness.value;
+        const int_lvl = gameState.derived.integratedLightingBrightness.value;
         const cfg = configuration.value;
 
         // Ambient light color. White at max brightness, orange-y when dimmed.
@@ -157,14 +158,16 @@ export function useShading(gameState: GameState, configuration: Configuration): 
 
             return {
                 diffuse: {
-                    fill: diffuse.toHex(),
+                    fill: diffuse.toHex(), // for SVG markings
+                    color: diffuse.toHex(), // for non-SVG markings
                 },
                 emission: {
-                    fill: emission.toHex(),
+                    fill: emission.toHex(), // for SVG markings
+                    color: emission.toHex(), // for non-SVG markings
                     filter: glowFilter,
                 },
                 combined: {
-                    fill: combined.toHex(),
+                    fill: combined.toHex(), // for SVG markings
                     color: combined.toHex(), // for non-SVG markings
                     filter: glowFilter,
                 },
@@ -210,7 +213,7 @@ export function useShading(gameState: GameState, configuration: Configuration): 
         const c_grn = new Color(cfg.themeIndicatorGreen);
         const c_blu = new Color(cfg.themeIndicatorBlue);
 
-        const weaklyBacklit = shade(c_prim, multiplyColors(c_prim, c_bl), bl_lvl * 0.5, 0.9);
+        const integrated = shade(c_prim, multiplyColors(c_prim, c_bl), int_lvl, 0.9);
         const primary = shade(c_prim, multiplyColors(c_prim, c_bl), bl_lvl, 0.9);
         const secondary = shade(c_sec, multiplyColors(c_sec, c_bl), bl_lvl, 0.9);
         const needle = shade(c_ndl, multiplyColors(c_ndl, c_nbl), bl_lvl, 0.9);
@@ -235,7 +238,7 @@ export function useShading(gameState: GameState, configuration: Configuration): 
             background: background.toHex(),
             lowerBackground: lowerBackground.toHex(),
             stalkBackground: stalkBackground.toHex(),
-            weaklyBacklit,
+            integrated,
             primary,
             secondary,
             display,

@@ -100,9 +100,10 @@ export type GameState = {
     current: TelemetryCurrent,
     unpaused: TelemetryUnpaused,
     derived: {
-        backlight: globalThis.ComputedRef<number>,
+        backlightBrightness: globalThis.ComputedRef<number>,
         displayBrightness: globalThis.ComputedRef<number>,
         indicatorBrightness: globalThis.ComputedRef<number>,
+        integratedLightingBrightness: globalThis.ComputedRef<number>,
         highBeamIndicatorOverride: globalThis.ComputedRef<boolean>,
         transMode: ComputedRef<"M" | "A">,
         transDirection: ComputedRef<"R" | "N" | "D">,
@@ -223,19 +224,29 @@ gameSocket.debug = true;
 // Backlight logic
 //-----------------------------------------------------------------------------
 
-const backlight = computed(() => {
+// Backlight intensity for the instrument cluster.
+const backlightBrightness = computed(() => {
     if (telemetryState.unpaused.lights.low || telemetryState.unpaused.lights.parking) return 1.0;
     return 0.0;
 });
 
+// Brightness of the instrument cluster displays.
 const displayBrightness = computed((): number => {
     if (!telemetryState.unpaused.electric.enabled) return 0.0;
     return 1.0;
 });
 
+// Brightness of the instrument cluster indicators.
 const indicatorBrightness = computed(() => {
     return 1.0;
 });
+
+// Backlight intensity for integrated lighting outside the instrument cluster.
+const integratedLightingBrightness = computed(() => {
+    if (!telemetryState.unpaused.electric.enabled) return 0.0;
+    return 0.3;
+});
+
 
 //-----------------------------------------------------------------------------
 // Low-beam logic
@@ -819,9 +830,10 @@ export function useGame(configuration: Configuration): { gameState: GameState, s
             current: telemetryState.current,
             unpaused: telemetryState.unpaused,
             derived: {
-                backlight,
+                backlightBrightness,
                 displayBrightness,
                 indicatorBrightness,
+                integratedLightingBrightness,
                 highBeamIndicatorOverride,
                 transMode,
                 transDirection,
