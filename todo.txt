@@ -1,7 +1,43 @@
 collapse control UI when some switch axes are unused so they don't look so derpy in that case
-truck config quick action menu (power, trailer hook, diff lock, lift axle x2)
-panel for the above
-aux lights panel
+
+ignition key panel!
+
+         actual ->  off             power           engine
+    off             -               P engineelect   P engineelect
+    acc             P engineelect   -               P engine
+    on              P engineelect   -               -
+    start           H ignitionstrt  H ignitionstrt  H ignitionstrt
+    ^ position
+
+    tap to place/remove key, then swipe to turn?
+
+    need to update gesture logic to report when the user releases the pointer,
+    in order to stop the start position. or just make some custom gesture logic.
+    two-finger rotate input on the whole screen would also be very cool though,
+    maybe I should do that...
+
+    multi-touch up/down for parking brake while I'm at it?
+
+button panel & quick-access in main menu!
+
+    electrical power (telemetry switch)
+    engine power (telemetry switch)
+    parking brake (telemetry switch)
+    trailer hook (button)
+    diff lock (telemetry switch)
+    truck lift axle (telemetry switch)
+    trailer lift axle (telemetry switch)
+    beacon (telemetry switch)
+    hazard lights (telemetry switch)
+    cruise control main (button)
+    cruise control up (button)
+    cruise control down (button)
+    cruise control resume (button)
+    cruise control adaptive mode (button)
+    lane assist mode (button)
+
+    https://sortablejs.github.io/vue.draggable.next/#/two-lists to configure?
+
 blackjack
 hookers
 ?????

@@ -89,7 +89,7 @@ function onGesture(data: GestureData) {
   sendToGame(`${axis}-${dir}`);
 }
 
-const enableGestureDebugging: boolean = false;
+const enableGestureDebugging: boolean = true;
 
 const gestureDebug = ref<string>("...");
 const gestureDebugHistory = ref<string[]>([]);
