@@ -185,6 +185,13 @@ export class TruckTelSocket {
     }
 
     /**
+     * Updates non-volatile user-data stored on the server.
+     */
+    sendUserData(data: any): void {
+        this.send({ user: data });
+    }
+
+    /**
      * "Structure" field in the TruckTel API request.
      */
     private readonly structure: string;

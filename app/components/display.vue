@@ -1,8 +1,9 @@
 <script setup lang="ts">
 
 import {validateDisplayUrl} from "~/misc/displayUrl";
-import type { Shading } from "~/types/shading";
-import type { ConfigurationData, GameState} from "~/types/globals";
+import type { Shading } from "~/composables/shading";
+import type { ConfigurationData } from "~/composables/configuration";
+import type { GameState } from "~/composables/game";
 
 const {
   address,
@@ -162,7 +163,7 @@ onUnmounted(() => {
     </div>
     <div
         :class="['display-power-outer', configuration.perfShadows ? 'display-power-outer-shaded' : '']"
-        @click.stop.prevent="togglePower()" @pointermove.stop @pointerdown.stop
+        @pointerup.stop.prevent="togglePower()" @pointermove.stop @pointerdown.stop
     >
       <div
           :class="['display-power-inner', configuration.perfShadows ? ' display-power-inner-shaded' : '']"

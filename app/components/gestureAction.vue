@@ -12,9 +12,19 @@ const {
 
 function describeActionWithIcons(action: ControlAction): string[] {
   if (action === undefined) return [];
-  if (action === "layer") return ["layers-plus"];
-  if (action === "menu") return ["menu"];
+  if (typeof action === "string") return {
+    layer: ["layers-plus"],
+    menu: ["menu"],
+  }[action];
   return {
+    ignition: {
+      inc: ["engine-outline"],
+      dec: ["engine-off-outline"],
+    },
+    parkingBrake: {
+      inc: ["car-brake-parking"],
+      dec: ["circle-off-outline"],
+    },
     lowBeam: {
       inc: ["car-light-dimmed", "plus"],
       dec: ["car-light-dimmed", "minus"],

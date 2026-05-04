@@ -9,12 +9,8 @@ export type GestureType =
     // Down -> movement.
     | "left" | "right" | "up" | "down"
 
-    // Two fingers: down -> down2 -> up/timer/linear move/circular move.
-    | "2click" | "2hold" | "2left" | "2right" | "2up" | "2down" | "2cw" | "2ccw"
-
-    // Down -> down2 -> down3. 3 fingers is the max we do anything with; we
-    // don't distinguish between gesture types.
-    | "3click"
+    // Circular move (only for two fingers).
+    | "cw" | "ccw"
 
     // If the callback returns true, a followup event will be sent when either
     // a second gesture is detected (without releasing pointers), or all
@@ -22,7 +18,21 @@ export type GestureType =
     | "release";
 
 export type GestureData = {
+    // The type of gesture that was detected.
     type: GestureType;
+
+    // Number of pointers (= fingers) used for the gesture. 1 for mouse events,
+    // 0 for emulated events.
+    fingers: number;
+
+    // If set, this is the first event reported for the current gesture.
+    first: boolean;
+
+    // If set, this gesture type cannot be captured.
+    last: boolean;
+
+    // Average position of the pointers in normalized client space (0..1 for
+    // left to right and for top to bottom).
     middleX: number | undefined;
     middleY: number | undefined;
 }
@@ -30,6 +40,8 @@ export type GestureData = {
 export type GestureConfig = {
     receiveSwipes?: boolean;
     receiveHolds?: boolean;
+    receiveRotations?: boolean;
+    receiveMultiTouch?: boolean;
     minimumDistanceRatio?: number;
     maximumTapDistanceRatio?: number;
     coneStrictness?: number;
@@ -37,27 +49,31 @@ export type GestureConfig = {
 }
 
 export function useGestureDetection(
-    callback: (gesture: GestureData) => boolean | undefined,
+    callback: (gesture: GestureData) => boolean | undefined | void,
     config?: GestureConfig,
     debug?: Ref<string>,
 ) {
 
     type PointerState = {
-        id: number,
+        // Start coordinate in client space. If a gesture is
+        // continued/captured by the callback, this holds the position of the
+        // latest continue/capture event.
         startX: number;
         startY: number;
+
+        // Most recent coordinate in client space.
         currentX: number;
         currentY: number;
     }
 
     type GestureState = {
-        // Pointer state records for tracking up to two pointers.
-        p1: PointerState;
-        p2: PointerState | null;
+        // Pointer state records.
+        pointers: Map<number, PointerState>;
 
-        // Whether we've called the gesture callback at least once already
-        // without the user releasing all pointers.
-        continued: boolean;
+        // Rotation accumulator when two fingers are down. Rotation is stored
+        // as a complex number to avoid overflow shenanigans.
+        rotRe: number;
+        rotIm: number;
 
         // Whether any pointer moved from its start location by more than the
         // maximum tap distance.
@@ -66,6 +82,15 @@ export function useGestureDetection(
         // Window timeout ID for the hold timer, or null if the hold timer
         // expired or was stopped for some other reason.
         holdTimer: number | null;
+
+        // Whether we've called the gesture callback at least once already
+        // without the user releasing all pointers.
+        continued: boolean;
+
+        // Set when the gesture was canceled by the browser, or by us if we
+        // can't handle it. No more gesture events will be generated, but
+        // pointer up/down is still tracked.
+        cancelled: boolean;
     };
 
     type SwipeType = false | undefined | "left" | "right" | "up" | "down";
@@ -76,20 +101,17 @@ export function useGestureDetection(
     const defaultHoldTimeout = 500;
 
     // Actual configuration.
-    const receiveSwipes: boolean = config?.receiveSwipes ?? true;
-    const receiveHolds: boolean = config?.receiveHolds ?? true;
+    const receiveSwipes: boolean = config?.receiveSwipes ?? false;
+    const receiveHolds: boolean = config?.receiveHolds ?? false;
+    const receiveRotations: boolean = config?.receiveRotations ?? false;
+    const receiveMultiTouch: boolean = config?.receiveMultiTouch ?? false;
     const minimumDistanceRatio: number = config?.minimumDistanceRatio ?? defaultMinimumDistanceRatio;
     const maximumTapDistanceRatio: number = (config?.maximumTapDistanceRatio ?? minimumDistanceRatio) / 2;
     const coneStrictness: number = config?.coneStrictness ?? defaultConeStrictness;
     const holdTimeout: number = config?.holdTimeout ?? defaultHoldTimeout;
 
-    // Current state of gesture detection. Becomes null when a complete gesture
-    // has been detected, even if one or more pointers are still down.
+    // Current state of gesture detection.
     let gestureState: GestureState | null = null;
-
-    // Set of pointer IDs that are currently down. Used for emulated click
-    // detection.
-    let pointersDown: Set<number> = new Set();
 
     // Set by finishGesture when we call the gesture callback, to keep track of
     // the gesture type we sent for the next call to updateDebug().
@@ -100,10 +122,13 @@ export function useGestureDetection(
     function updateDebug(cause: string) {
         if (debug === undefined) return;
 
-        let state = `d${pointersDown.size}`;
+        let state: string;
         if (gestureState !== null) {
+            state = `d${gestureState.pointers.size}`;
             if (gestureState.holdTimer !== undefined) state += "T";
             if (gestureState.moved) state += "M";
+        } else {
+            state = "u";
         }
 
         debug.value = `${cause}: ${state}-${debugResult}`;
@@ -111,20 +136,9 @@ export function useGestureDetection(
     }
 
 
-    // Returns which pointer in our data structure the given pointer ID is for.
-    // Should I refactor to a map? Probably!
-    function whichPointer(id: number): "new" | "p1" | "p2" {
-        if (gestureState === null) return "new";
-        if (id === gestureState.p1.id) return "p1";
-        if (gestureState.p2 === null) return "new";
-        if (id === gestureState.p2.id) return "p2";
-        return "new";
-    }
-
     // Makes a new pointer state record from a pointer down event.
     function makePointer(event: PointerEvent): PointerState {
         return {
-            id: event.pointerId,
             startX: event.clientX,
             startY: event.clientY,
             currentX: event.clientX,
@@ -144,12 +158,10 @@ export function useGestureDetection(
         if (gestureState === null) return;
         gestureState.holdTimer = null;
 
-        const swipe = isSwipe(gestureState);
-        if (swipe === false && !gestureState.moved) {
-            if (gestureState.p2 === null) {
+        if (!gestureState.cancelled) {
+            const swipe = isSwipe();
+            if (swipe === false && !gestureState.moved) {
                 finishGesture("hold");
-            } else {
-                finishGesture("2hold");
             }
         }
         updateDebug("Ti");
@@ -167,23 +179,21 @@ export function useGestureDetection(
         }
     }
 
-    // Resets the gesture state.
-    function resetState() {
-        runHoldTimer(false);
-        gestureState = null;
-    }
-
     // Returns whether the current movement qualifies as a swipe, and if so,
     // in which direction.
-    function isSwipe(state: GestureState): SwipeType {
-        let dx = state.p1.currentX - state.p1.startX;
-        let dy = state.p1.currentY - state.p1.startY;
-        if (state.p2 !== null) {
-            dx += state.p2.currentX - state.p2.startX;
-            dy += state.p2.currentY - state.p2.startY;
-            dx /= 2;
-            dy /= 2;
+    function isSwipe(): SwipeType {
+        if (gestureState === null || gestureState.cancelled) return undefined;
+
+        // Determine averaged finger movement from the start position.
+        let dx = 0;
+        let dy = 0;
+        for (const pointerState of gestureState.pointers.values()) {
+            dx += pointerState.currentX - pointerState.startX;
+            dy += pointerState.currentY - pointerState.startY;
         }
+        dx /= gestureState.pointers.size;
+        dy /= gestureState.pointers.size;
+
         const distanceSqr = dx * dx + dy * dy;
         const threshold = Math.min(window.innerWidth, window.innerHeight) * minimumDistanceRatio;
         if (distanceSqr < threshold * threshold) return false;
@@ -203,62 +213,102 @@ export function useGestureDetection(
         if (type !== undefined) {
             let middleX = 0;
             let middleY = 0;
+            let fingers = 0;
+            let first = true;
 
             if (gestureState !== null) {
-                middleX = (gestureState.p1.startX + gestureState.p1.currentX) / 2;
-                middleY = (gestureState.p1.startY + gestureState.p1.currentY) / 2;
-
-                if (gestureState.p2 !== null) {
-                    middleX += (gestureState.p2.startX + gestureState.p2.currentX) / 2;
-                    middleY += (gestureState.p2.startY + gestureState.p2.currentY) / 2;
-                    middleX /= 2;
-                    middleY /= 2;
+                debugResult += `-${fingers}`;
+                for (const pointerState of gestureState.pointers.values()) {
+                    middleX += pointerState.currentX + pointerState.startX;
+                    middleY += pointerState.currentY + pointerState.startY;
                 }
-
-                middleX /= window.innerWidth;
-                middleY /= window.innerHeight;
+                middleX /= window.innerWidth * gestureState.pointers.size * 2;
+                middleY /= window.innerHeight * gestureState.pointers.size * 2;
+                fingers = gestureState.pointers.size;
+                first = !gestureState.continued;
             }
 
-            capture = callback({ type, middleX, middleY }) ?? false;
+            const last = type == "click" || type == "release";
+
+            // Actually call the callback, at least if there aren't too many
+            // fingers.
+            if (fingers <= 1 || receiveMultiTouch) {
+                capture = callback({type, fingers, first, last, middleX, middleY}) ?? false;
+            }
 
             // Some gesture types cannot be continued.
-            if (capture && (type.endsWith("click") || type == "release")) {
+            if (capture && last) {
                 console.warn(`ignoring gesture callback's attempt to capture ${type}!`);
                 capture = false;
             }
+            if (capture) {
+                debugResult += "...";
+            }
         }
-        if (gestureState && capture) {
-            resetPointer(gestureState.p1);
-            resetPointer(gestureState.p2);
-            runHoldTimer(!gestureState.moved);
-            gestureState.continued = true;
-        } else {
-            resetState();
+        if (gestureState !== null) {
+            if (capture) {
+                // Reset movement states.
+                for (const pointerState of gestureState.pointers.values()) {
+                    resetPointer(pointerState);
+                }
+                gestureState.rotRe = 1.0;
+                gestureState.rotIm = 0.0;
+
+                // Restart the hold timer if we haven't moved yet, so longer
+                // holds can be detected.
+                runHoldTimer(!gestureState.moved);
+
+                // Set continued flag so clicks are disabled and release events
+                // are generated.
+                gestureState.continued = true;
+            } else {
+                // Cancel the gesture, so no further events are generated.
+                runHoldTimer(false);
+                gestureState.cancelled = true;
+            }
+        }
+    }
+
+    // Some mobile browsers will generate click events regardless of
+    // preventDefault on the pointer events. We want to ignore those, because
+    // we'd get send two taps instead of one otherwise. But we DO want to
+    // handle emulated clicks from keyboard navigation. There is undoubtedly
+    // a better way, but a timer suffices; we ignore onclick if a pointer up
+    // event has fired recently.
+    let noClickTimer: number | undefined = undefined;
+    function noClicks(event: MouseEvent, isUp?: boolean) {
+        event.stopPropagation();
+        event.preventDefault();
+        if (isUp) {
+            if (noClickTimer !== undefined) window.clearTimeout(noClickTimer);
+            noClickTimer = window.setTimeout(() => noClickTimer = undefined, 100);
         }
     }
 
     function onPointerDown(event: PointerEvent) {
-        // Only acknowledge the left mouse button.
+        // Only acknowledge the primary button of the pointing device.
         if (event.button != 0) {
             updateDebug(`Do${event.button}`);
             return;
         }
 
         // Capture everything else.
-        event.stopPropagation();
-        event.preventDefault();
-        pointersDown.add(event.pointerId);
+        noClicks(event);
         const target = event.target as HTMLElement;
         target.setPointerCapture(event.pointerId);
 
         // Handle the start of a gesture.
         if (gestureState === null) {
+            const pointers = new Map();
+            pointers.set(event.pointerId, makePointer(event));
             gestureState = {
-                p1: makePointer(event),
-                p2: null,
-                continued: false,
+                pointers,
+                rotRe: 1.0,
+                rotIm: 0.0,
                 moved: false,
                 holdTimer: null,
+                continued: false,
+                cancelled: false,
             }
             runHoldTimer(true);
             updateDebug("D1");
@@ -266,34 +316,67 @@ export function useGestureDetection(
         }
 
         // We should have a new pointer here, but check to be sure.
-        if (whichPointer(event.pointerId) != "new") {
+        if (gestureState.pointers.has(event.pointerId)) {
             // Wait what?
             updateDebug("D!");
             return;
         }
 
-        // If we don't have a record for pointer 2, make one.
-        if (gestureState.p2 === null) {
-            gestureState.p2 = makePointer(event);
-            updateDebug("D2");
-            return;
+        // Make a new pointer record.
+        gestureState.pointers.set(event.pointerId, makePointer(event));
+
+        // If we've reached the maximum number of pointers supported, finish
+        // the gesture. As a safeguard, delete it entirely; sometimes pointers
+        // get "stuck on" somehow. Not sure why that happens.
+        if (gestureState.pointers.size >= 5) {
+            finishGesture(gestureState.cancelled ? undefined : "click");
+            gestureState = null;
         }
 
-        // A third pointer has entered the chat.
-        finishGesture("3click");
-        updateDebug("D3");
+        updateDebug(`D${gestureState?.pointers?.size ?? 0}`);
     }
 
     function onPointerMove(event: PointerEvent) {
-        event.stopPropagation();
-        event.preventDefault();
+        noClicks(event);
 
         // Are we tracking this pointer? If so, get its state record.
-        if (gestureState === null) return;
-        const id = whichPointer(event.pointerId);
-        if (id == "new") return;
-        let pointerState = id == "p1" ? gestureState.p1 : gestureState.p2;
-        if (pointerState === null) return;
+        if (gestureState === null || gestureState.cancelled) return;
+        let pointerState = gestureState.pointers.get(event.pointerId);
+        if (pointerState === undefined) return;
+
+        // Accumulate rotation.
+        if (gestureState.pointers.size == 2) {
+            let otherId = null;
+            for (otherId of gestureState.pointers.keys()) {
+                if (otherId != event.pointerId) break;
+            }
+            const otherState = gestureState.pointers.get(otherId!)!;
+            const dxBefore = pointerState.currentX - otherState.currentX;
+            const dyBefore = pointerState.currentY - otherState.currentY;
+            const dxAfter = event.clientX - otherState.currentX;
+            const dyAfter = event.clientY - otherState.currentY;
+
+            // Compute before * conj(after) to subtract the angles.
+            let re = dxBefore * dxAfter + dyBefore * dyAfter;
+            let im = dyBefore * dxAfter - dxBefore * dyAfter;
+
+            // Normalize. Ignore if the norm is too small. The norm will be the
+            // square of the pixel distance between the two pointers, so it
+            // should really be quite bit.
+            const norm = Math.hypot(re, im);
+            if (norm > 100) {
+                re /= norm;
+                im /= norm;
+
+                // Multiply with rotation accumulator to add the angle. Float
+                // error aside, this should stay normalized, and float error
+                // *should* not be significant here, so we'll avoid doing it.
+                const newRe = re * gestureState.rotRe - im * gestureState.rotIm;
+                const newIm = re * gestureState.rotIm + im * gestureState.rotRe;
+                gestureState.rotRe = newRe;
+                gestureState.rotIm = newIm;
+            }
+        }
 
         // Update pointer state.
         pointerState.currentX = event.clientX;
@@ -310,20 +393,29 @@ export function useGestureDetection(
             }
         }
 
+        // Check for rotations. Since we start the accumulator at (real) 1,
+        // the imaginary part will go up and down with rotation. We'll stop at
+        // +/- 0.5i, corresponding to 30 degrees of rotation.
+        if (receiveRotations) {
+            if (gestureState.rotIm < -0.5) {
+                finishGesture("cw");
+            } else if (gestureState.rotIm > 0.5) {
+                finishGesture("ccw");
+            }
+        }
+
         // Check for swipes.
         if (receiveSwipes) {
-            let swipe = isSwipe(gestureState);
+            let swipe = isSwipe();
             if (typeof swipe == "string") {
-                finishGesture(gestureState.p2 === null ? swipe : `2${swipe}`);
+                finishGesture(swipe);
             }
         }
         updateDebug("Mo");
     }
 
     function onPointerUp(event: PointerEvent) {
-        event.stopPropagation();
-        event.preventDefault();
-        pointersDown.delete(event.pointerId);
+        noClicks(event, true);
         if (gestureState === null) return;
 
         // Just in case there's movement data in the event that hasn't been
@@ -331,45 +423,50 @@ export function useGestureDetection(
         onPointerMove(event);
 
         // Which pointer is this?
-        const id = whichPointer(event.pointerId);
-        if (id == "new") {
+        const pointerState = gestureState.pointers.get(event.pointerId);
+        if (pointerState === undefined) {
             // Released pointer that we're not tracking, ignore.
             updateDebug("U?");
             return;
-        } else if (id == "p2" || gestureState.p2 !== null) {
-            if (!gestureState.continued && !gestureState.moved) {
-                // Two-finger tap.
-                finishGesture("2click");
-            } else {
-                // Inconclusive; just get rid of the second pointer's state
-                // record.
-                if (id == "p1") gestureState.p1 = gestureState.p2!;
-                gestureState.p2 = null;
+        } else if (gestureState.pointers.size > 1) {
+            if (!gestureState.moved && !gestureState.continued && !gestureState.cancelled) {
+                // Multi-touch tap.
+                finishGesture("click");
             }
-        } else if (gestureState.continued) {
-            // Released the final pointer after a gesture continuation.
-            finishGesture("release");
-        } else if (!gestureState.moved) {
-            // Released the pointer within the hold time period, without
-            // moving, and without adding a second one (those would have
-            // triggered different gestures).
-            finishGesture("click");
+
+            // Clean up pointer state.
+            gestureState.pointers.delete(event.pointerId);
         } else {
-            // No gesture was detected, movement was detected but not a
-            // valid swipe.
-            finishGesture(undefined)
+            if (gestureState.cancelled) {
+                // Gesture was canceled; don't return anything, but clean up.
+                finishGesture();
+            } else if (gestureState.continued) {
+                // Released the final pointer after a gesture continuation.
+                finishGesture("release");
+            } else if (!gestureState.moved) {
+                // Released the pointer within the hold time period, without
+                // moving, and without adding a second one (those would have
+                // triggered different gestures).
+                finishGesture("click");
+            } else {
+                // No gesture was detected, movement was detected but not a
+                // valid swipe.
+                finishGesture();
+            }
+
+            // This was the last pointer; clean up the whole gesture state.
+            gestureState = null;
         }
         updateDebug("Up");
     }
 
     function onPointerCancel(event: PointerEvent) {
-        event.stopPropagation();
-        event.preventDefault();
-        pointersDown.delete(event.pointerId);
+        noClicks(event, true);
 
         // At least one pointer was canceled by the browser. Stop the tracking
         // of gestures immediately.
         finishGesture();
+        gestureState = null;
         updateDebug("Ca");
     }
 
@@ -379,17 +476,15 @@ export function useGestureDetection(
 
         // I think all clicks should be emulated at this point, since we're
         // capturing pointer up and down. But just in case...
-        const isEmulated = event instanceof KeyboardEvent || pointersDown.size == 0;
+        const isEmulated = event instanceof KeyboardEvent || noClickTimer === undefined;
         if (isEmulated) {
             finishGesture("click");
             updateDebug("Em");
             return;
         }
 
-        // Fallback behavior to kill an ongoing gesture.
-        const data = gestureState;
-        if (data === null) return;
-        finishGesture(data.moved ? undefined : "click");
+        // Fallback behavior: kill any ongoing gesture.
+        finishGesture();
         updateDebug("Cl");
     }
 

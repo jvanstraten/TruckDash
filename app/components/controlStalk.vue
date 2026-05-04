@@ -173,7 +173,7 @@ const bodyStyle = computed(() => {
   // because children are set to inherit its transition property.
   if (enableAnimations.value) {
     Object.assign(style, {
-      transition: "all 0.2s ease-in-out",
+      transition: "all 0.15s ease-in-out",
     });
   }
 

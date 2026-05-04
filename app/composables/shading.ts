@@ -2,18 +2,18 @@ import { Color } from "color-core";
 import SunCalc from "~/lib/suncalc";
 import type { Configuration } from "~/composables/configuration";
 import type { GameState } from "~/composables/game";
-import type { Instruments } from "~/composables/instruments";
+import type { StyleValue } from "vue";
 
 export type IndicatorStyles = {
-    on: object,
-    off: object,
+    on: StyleValue,
+    off: StyleValue,
 };
 
 export type AllStyles = {
-    diffuse: object,
-    emission: object,
-    combined: object,
-    needle: object,
+    diffuse: StyleValue,
+    emission: StyleValue,
+    combined: StyleValue,
+    needle: StyleValue,
     indicator: IndicatorStyles,
     divIndicator: IndicatorStyles,
 };

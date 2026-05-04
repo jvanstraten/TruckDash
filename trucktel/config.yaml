@@ -56,6 +56,8 @@ custom-structures:
     electric:
       enabled:
         key: truck.electric.enabled
+      acc:
+        key: user.state.acc
       indicator:
         key: truck.battery.voltage.warning
 
@@ -186,8 +188,19 @@ custom-structures:
       speedLimit:
         key: truck.navigation.speed.limit
 
+    profiles:
+      key: user.profiles
+
 input:
   binary:
+    # Ignition key.
+    ignitionoff: TruckDash swipe
+    ignitionon: TruckDash swipe
+    ignitionstrt: TruckDash swipe
+
+    # Parking brake.
+    parkingbrake: TruckDash swipe
+
     # Utility stalk horizontal move.
     hblight: TruckDash swipe
     lighthorn: TruckDash swipe

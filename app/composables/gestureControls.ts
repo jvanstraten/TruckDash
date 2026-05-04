@@ -2,9 +2,15 @@ import type { Configuration } from "~/composables/configuration";
 import type { StalkMap, StalkAxisType } from "~/composables/stalkMap";
 import type { GestureData } from "~/composables/gestureDetection";
 
-export type StalkAxisDirection = "inc" | "dec";
+// Rel = pointers released; inc/dec moves axis in the given direction.
+export type AxisDirection = "inc" | "dec" | "rel";
 
-export type ControlAction = "layer" | "menu" | [StalkAxisType, StalkAxisDirection] | undefined;
+export type AxisType = StalkAxisType | "ignition" | "parkingBrake";
+
+export type ControlAction
+    = "layer" | "menu"
+    | [AxisType, AxisDirection]
+    | undefined;
 
 export type SwipeZoneMapping = {
     left: ControlAction;
@@ -29,6 +35,10 @@ export type GestureMapping = {
     zones: SwipeZoneMapping[];
     click: ControlAction;
     hold: ControlAction;
+    cw: ControlAction;
+    ccw: ControlAction;
+    up2: ControlAction;
+    down2: ControlAction;
 };
 
 export function useGestureControls(
@@ -63,11 +73,22 @@ export function useGestureControls(
         controlLayerTimer.value = window.setTimeout(() => resetControlLayer(), 500);
     }
 
-    function describeActionWithText(action: ControlAction): string {
+    function describeActionWithText(action: ControlAction): string | undefined {
         if (action === undefined) return "not mapped";
-        if (action === "layer") return "next control layer";
-        if (action === "menu") return "open menu";
+        if (typeof action === "string") return {
+            layer: "next control layer",
+            menu: "open menu",
+        }[action];
+        if (action[1] == "rel") return undefined;
         return {
+            ignition: {
+                inc: "ignition key clockwise",
+                dec: "ignition key counterclockwise",
+            },
+            parkingBrake: {
+                inc: "set parking brake",
+                dec: "release parking brake",
+            },
             lowBeam: {
                 inc: "increase low beams",
                 dec: "decrease low beams",
@@ -168,7 +189,11 @@ export function useGestureControls(
         let mapping: GestureMapping = {
             zones: [],
             click: undefined,
-            hold: undefined
+            hold: undefined,
+            cw: undefined,
+            ccw: undefined,
+            up2: undefined,
+            down2: undefined,
         };
 
         const config = configuration.value;
@@ -207,8 +232,22 @@ export function useGestureControls(
         // Hold always enters menu.
         mapping.hold = "menu";
 
+        // Rotations control ignition.
+        // TODO allow this to be turned off.
+        mapping.cw = ["ignition", "inc"];
+        mapping.ccw = ["ignition", "dec"];
+
+        // Two-finger up/down swipes control the parking brake.
+        // TODO allow this to be turned off or reversed.
+        mapping.down2 = ["parkingBrake", "inc"];
+        mapping.up2 = ["parkingBrake", "dec"];
+
         return mapping;
     });
+
+    // Once an event is reported for an axis, we lock all future events for that
+    // gesture to the same axis.
+    let axisLock: AxisType | "nonAxis" | undefined = undefined;
 
     function decodeGesture(data: GestureData): ControlAction {
 
@@ -216,41 +255,86 @@ export function useGestureControls(
         let action: ControlAction = undefined;
         const actions = gestureMapping.value;
         let zoneIndex: number = 0;
-        if (data.type == "click") {
-            action = actions.click;
-        } else if (data.type == "hold") {
-            action = actions.hold;
-        } else if (actions.zones.length > 0) {
-            zoneIndex = Math.floor(data.middleX! * actions.zones.length);
-            const zone = actions.zones[zoneIndex]!;
-            action = zone[data.type];
+        if (data.fingers <= 1) {
+            if (data.type == "click") {
+                action = actions.click;
+            } else if (data.type == "hold") {
+                action = actions.hold;
+            } else if (data.type == "left" || data.type == "right" || data.type == "up" || data.type == "down") {
+                if (actions.zones.length > 0) {
+                    zoneIndex = Math.floor(data.middleX! * actions.zones.length);
+                    const zone = actions.zones[zoneIndex]!;
+                    action = zone[data.type];
+                }
+            }
+        } else if (data.fingers == 2) {
+            if (data.type == "cw") {
+                action = actions.cw;
+            } else if (data.type == "ccw") {
+                action = actions.ccw;
+            } else if (data.type == "up") {
+                action = actions.up2;
+            } else if (data.type == "down") {
+                action = actions.down2;
+            }
+        }
+
+        // Handle axis lock. If we're locked to an axis, propagate release
+        // events, and block all events for other axes. If multi-swipe is
+        // disabled, block all events while we have an axis lock, even for
+        // the same axis.
+        const axis = (typeof action == "string" || action == undefined) ? "nonAxis" : action[0];
+        if (axisLock !== undefined) {
+            if (data.type == "release" && axisLock !== "nonAxis") {
+                action = [axisLock, "rel"];
+            } else if (axis !== axisLock || !configuration.value.stalkMultiSwipe) {
+                action = undefined;
+            }
+        }
+
+        // Update axis lock.
+        if (data.last) {
+            axisLock = undefined;
+        } else if (axisLock === undefined) {
+            axisLock = axis;
         }
 
         // Display test messages when mapping is active.
-        if (onGestureDecoded !== undefined && onGestureDecoded.value !== undefined) {
-            const gesture = {
+        if (onGestureDecoded !== undefined && onGestureDecoded.value !== undefined && data.type != "release") {
+            let gesture = {
                 click: "Tap",
                 hold: "Hold",
                 left: `Swipe left in zone ${zoneIndex + 1}`,
                 right: `Swipe right in zone ${zoneIndex + 1}`,
                 up: `Swipe up in zone ${zoneIndex + 1}`,
                 down: `Swipe down in zone ${zoneIndex + 1}`,
+                cw: "Swipe clockwise",
+                ccw: "Swipe counterclockwise",
             }[data.type];
+            if (data.fingers > 1) gesture = `${data.fingers}-finger ${gesture.toLowerCase()}`;
             const result = describeActionWithText(action);
-            let color = "info";
-            if (action === undefined) {
-                color = "error";
-            } else if (action == "layer" || action == "menu") {
-                color = "default";
+            if (result !== undefined) {
+                let color = "info";
+                if (action === undefined) {
+                    color = "error";
+                } else if (action == "layer" || action == "menu") {
+                    color = "default";
+                }
+                onGestureDecoded.value(`${gesture}: ${result}`, color);
             }
-            onGestureDecoded.value(`${gesture}: ${result}`, color);
         }
 
         // Handle click count.
         if (action == "layer") {
             controlLayer.value++;
         }
-        startControlLayerTimer();
+        if (data.last) {
+            // Gesture is complete, restart control layer reset timer.
+            startControlLayerTimer();
+        } else {
+            // Gesture is not yet complete, lock control layer.
+            stopControlLayerTimer();
+        }
 
         if (action != "layer") return action;
         return undefined;

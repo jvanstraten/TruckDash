@@ -32,16 +32,32 @@ const {
     </div>
 
     <div class="workspace-click-actions">
-      <div class="workspace-click-cell" style="grid-area: 1 / 1 / 2 / 2">
-        <v-icon size="4cqw" color="#FFF8">mdi-gesture-tap</v-icon>
-        <gestureAction :action="gestureMapping.click" size="4cqw"/>
-      </div>
-      <div class="workspace-click-cell" style="grid-area: 1 / 2 / 2 / 3">
-        Anywhere
+      <div class="workspace-click-cell" style="grid-area: 1 / 1 / 2 / 3">
+        <gestureAction :action="gestureMapping.down2" size="3cqw"/>
+        <v-icon size="2cqw" color="#FFF8">mdi-arrow-down</v-icon>
+        <v-icon size="3cqw" color="#FFF8">mdi-gesture-two-tap</v-icon>
+        <v-icon size="2cqw" color="#FFF8">mdi-arrow-up</v-icon>
+        <gestureAction :action="gestureMapping.up2" size="3cqw"/>
       </div>
       <div class="workspace-click-cell" style="grid-area: 1 / 3 / 2 / 4">
-        <v-icon size="4cqw" color="#FFF8">mdi-gesture-tap-hold</v-icon>
-        <gestureAction :action="gestureMapping.hold" size="4cqw"/>
+        <v-icon size="3cqw" color="#FFF8">mdi-gesture-tap</v-icon>
+        <v-icon size="3cqw" color="#FFF8" style="margin-left: -1.3cqw; margin-right: -0.7cqw">mdi-circle-small</v-icon>
+        <gestureAction :action="gestureMapping.click" size="3cqw"/>
+      </div>
+      <div class="workspace-click-cell" style="grid-area: 1 / 4 / 2 / 6">
+        Anywhere
+      </div>
+      <div class="workspace-click-cell" style="grid-area: 1 / 6 / 2 / 7">
+        <v-icon size="3cqw" color="#FFF8">mdi-gesture-tap-hold</v-icon>
+        <v-icon size="3cqw" color="#FFF8" style="margin-left: -0.3cqw">mdi-minus</v-icon>
+        <gestureAction :action="gestureMapping.hold" size="3cqw"/>
+      </div>
+      <div class="workspace-click-cell" style="grid-area: 1 / 7 / 2 / 9">
+        <gestureAction :action="gestureMapping.ccw" size="3cqw"/>
+        <v-icon size="2cqw" color="#FFF8" style="margin-left: 0.5cqw; margin-right: -0.5cqw">mdi-sync</v-icon>
+        <v-icon size="3cqw" color="#FFF8">mdi-gesture-two-tap</v-icon>
+        <v-icon size="2cqw" color="#FFF8" style="margin-left: -0.5cqw; margin-right: 0.5cqw">mdi-autorenew</v-icon>
+        <gestureAction :action="gestureMapping.cw" size="3cqw"/>
       </div>
     </div>
 
@@ -111,16 +127,16 @@ const {
 
 .workspace-click-actions {
   position: absolute;
-  left: 30cqw;
+  left: 10cqw;
   height: 5cqw;
-  right: 30cqw;
+  right: 10cqw;
   bottom: 0;
   background-color: #444;
   border-radius: 2cqmin 2cqmin 0 0;
   border: 1px solid white;
   border-bottom: none;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(8, 1fr);
   grid-template-rows: repeat(1, 1fr);
 }
 

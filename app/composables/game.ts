@@ -7,6 +7,12 @@ import { TruckTelSocket } from "~/lib/trucktel";
 
 type TelemetryCurrent = {
     paused: null | boolean,
+
+    // User data.
+    electric: {
+        acc: null | boolean,
+    }
+    profiles: any,
 };
 
 type TelemetryUnpaused = {
@@ -104,7 +110,8 @@ export type GameState = {
         displayBrightness: globalThis.ComputedRef<number>,
         indicatorBrightness: globalThis.ComputedRef<number>,
         integratedLightingBrightness: globalThis.ComputedRef<number>,
-        highBeamIndicatorOverride: globalThis.ComputedRef<boolean>,
+        ignitionSwitch: Ref<number>,
+        highBeamIndicatorOverride: Ref<boolean>,
         transMode: ComputedRef<"M" | "A">,
         transDirection: ComputedRef<"R" | "N" | "D">,
         transGearIndex: ComputedRef<number>,
@@ -128,6 +135,10 @@ export type GameState = {
 const telemetryState: TelemetryState = {
     current: reactive({
         paused: null,
+        profiles: null,
+        electric: {
+            acc: null,
+        },
     }),
     unpaused: reactive({
         time: {
@@ -227,12 +238,15 @@ gameSocket.debug = true;
 // Backlight intensity for the instrument cluster.
 const backlightBrightness = computed(() => {
     if (telemetryState.unpaused.lights.low || telemetryState.unpaused.lights.parking) return 1.0;
-    return 0.0;
+    if (!telemetryState.current.electric.acc) return 0.0;
+    return 0.3;
 });
 
 // Brightness of the instrument cluster displays.
 const displayBrightness = computed((): number => {
-    if (!telemetryState.unpaused.electric.enabled) return 0.0;
+    if (telemetryState.unpaused.lights.low || telemetryState.unpaused.lights.parking) return 1.0;
+    if (!telemetryState.current.electric.acc) return 0.0;
+    if (!telemetryState.unpaused.electric.enabled) return 0.3;
     return 1.0;
 });
 
@@ -243,10 +257,163 @@ const indicatorBrightness = computed(() => {
 
 // Backlight intensity for integrated lighting outside the instrument cluster.
 const integratedLightingBrightness = computed(() => {
-    if (!telemetryState.unpaused.electric.enabled) return 0.0;
+    if (!telemetryState.current.electric.acc) return 0.0;
     return 0.3;
 });
 
+//-----------------------------------------------------------------------------
+// Haptic feedback
+//-----------------------------------------------------------------------------
+
+// This is called whenever an emulated switch changes position to provide
+// haptic feedback via vibration, if enabled.
+function haptic() {
+    try {
+        // TODO configuration
+        navigator.vibrate(100);
+    } catch (e) {}
+}
+
+//-----------------------------------------------------------------------------
+// Ignition key switch logic
+//-----------------------------------------------------------------------------
+
+// Ignition switch position:
+//   0 = off
+//   1 = acc (only dashboard gets power)
+//   2 = on
+//   3 = start
+const ignitionSwitch = ref(0);
+
+// Sync game to local state.
+watch(() => telemetryState.unpaused.electric.enabled, (value) => {
+    // Electricity enabled elsewhere.
+    if (value === true && ignitionSwitch.value < 2) {
+        ignitionSwitch.value = 2;
+    }
+
+    // Electricity disabled elsewhere.
+    if (value === false && ignitionSwitch.value > 1) {
+        ignitionSwitch.value = 1;
+    }
+});
+
+// Sync other clients to local state.
+watch(() => telemetryState.current.electric.acc, (value) => {
+    // Accessories enabled elsewhere.
+    if (value === true && ignitionSwitch.value < 1) {
+        ignitionSwitch.value = 1;
+    }
+
+    // Accessories disabled elsewhere.
+    if (value === false && ignitionSwitch.value > 0) {
+        ignitionSwitch.value = 0;
+    }
+});
+
+// Sync local state to game.
+let ignitionSwitchStart: boolean = false;
+watch(ignitionSwitch, () => {
+    const value = ignitionSwitch.value;
+
+    // Control starter.
+    switch (value) {
+        case 0:
+        case 1:
+        case 2:
+            if (ignitionSwitchStart) {
+                gameSocket.releaseInput("ignitionstrt");
+                ignitionSwitchStart = false;
+            }
+            break;
+        case 3:
+            if (!ignitionSwitchStart) {
+                gameSocket.holdInput("ignitionstrt");
+                ignitionSwitchStart = true;
+            }
+            break;
+    }
+
+    // Control electrical power.
+    switch (value) {
+        case 0:
+        case 1:
+            if (telemetryState.unpaused.electric.enabled) {
+                gameSocket.pressInput("ignitionoff");
+            }
+            break;
+        case 2:
+            if (!telemetryState.unpaused.electric.enabled) {
+                gameSocket.pressInput("ignitionon");
+            }
+            break;
+        case 3:
+            // Don't need to do anything; handled by the start input.
+            break;
+    }
+
+    // Sync accessory power with other TruckDash clients.
+    switch (value) {
+        case 0:
+            if (telemetryState.current.electric.acc) {
+                gameSocket.sendUserData({ state: { acc: false } });
+            }
+            break;
+        case 1:
+        case 2:
+        case 3:
+            if (!telemetryState.current.electric.acc) {
+                gameSocket.sendUserData({ state: { acc: true } });
+            }
+            break;
+    }
+});
+
+function ignitionSwitchInc() {
+    if (ignitionSwitch.value >= 3) return;
+    if (ignitionSwitch.value < 2) haptic();
+    ignitionSwitch.value++;
+}
+
+function ignitionSwitchDec() {
+    if (ignitionSwitch.value <= 0) return;
+    if (ignitionSwitch.value < 3) haptic();
+    ignitionSwitch.value--;
+}
+
+function ignitionSwitchRel() {
+    if (ignitionSwitch.value == 3) ignitionSwitch.value = 2;
+}
+
+//-----------------------------------------------------------------------------
+// Parking brake logic
+//-----------------------------------------------------------------------------
+
+// Local parking brake state.
+let parkingBrakeSetHere = false;
+
+// When the game state updates, sync our local state.
+watch(() => telemetryState.unpaused.brake.parking, (newState) => {
+    if (newState !== null) {
+        parkingBrakeSetHere = newState;
+    }
+})
+
+function parkingBrakeSet() {
+    if (!parkingBrakeSetHere) {
+        gameSocket.pressInput("parkingbrake");
+        parkingBrakeSetHere = true;
+        haptic();
+    }
+}
+
+function parkingBrakeRelease() {
+    if (parkingBrakeSetHere) {
+        gameSocket.pressInput("parkingbrake");
+        parkingBrakeSetHere = false;
+        haptic();
+    }
+}
 
 //-----------------------------------------------------------------------------
 // Low-beam logic
@@ -275,11 +442,13 @@ function utilStalkLowBeamInc() {
         case 0:
             if (!utilStalkLowBeamCfgSkipPark) {
                 gameSocket.pressInput("lightpark");
+                haptic();
                 break;
             }
             // fallthrough
         case 1:
             gameSocket.pressInput("lighton");
+            haptic();
             break;
     }
 }
@@ -289,11 +458,13 @@ function utilStalkLowBeamDec() {
         case 2:
             if (!utilStalkLowBeamCfgSkipPark) {
                 gameSocket.pressInput("lightpark");
+                haptic();
                 break;
             }
             // fallthrough
         case 1:
             gameSocket.pressInput("lightoff");
+            haptic();
             break;
     }
 }
@@ -308,27 +479,30 @@ function utilStalkLowBeamDec() {
 // positions.
 let utilStalkHighBeamCfgLightHornMode = ref<"disabled" | "reverse" | "middle">("middle");
 
-// Time that the light horn stays on for a single input.
-let utilStalkHighBeamCfgLightHornMillis: number = 800;
-
 function utilStalkHighBeamSyncCfg(configuration: ConfigurationData) {
     utilStalkHighBeamCfgLightHornMode.value = configuration.stalkLightHornMode;
-    utilStalkHighBeamCfgLightHornMillis = configuration.stalkLightHornTimer;
 }
-
-// Timer for light horn behavior.
-const utilStalkHighBeamLightHornTimer = ref<undefined | number>(undefined);
 
 // Light horn active flag. The game doesn't report the high beams as being
 // on via telemetry when the light horn button is used, even though the
-// high-beam indicator light *does* come on. So we need to work around that.
-const highBeamIndicatorOverride = computed(() => {
-    return utilStalkHighBeamLightHornTimer.value !== undefined;
-})
+// high-beam indicator light *does* come on. So besides tracking state, we
+// also use this for the instrument cluster.
+const utilStalkHighBeamHorn = ref(false);
+
+// The horn will stay on until at least the expiration of this timer, even
+// if the pointer release event comes earlier.
+let utilStalkHighBeamMinimumTimer: number | undefined = undefined;
+
+// Whether the user is holding the light horn manually.
+let utilStalkHighBeamHornHeld: boolean = false;
+
+// After the light horn is released, a second swipe soon after must be able
+// to latch it. So for that we need a timer.
+let utilStalkHighBeamSwipeTimer: number | undefined = undefined;
 
 // Stalk position.
 const utilStalkHighBeam = computed((): number => {
-    if (utilStalkHighBeamLightHornTimer.value !== undefined) {
+    if (utilStalkHighBeamHorn.value) {
         return utilStalkHighBeamCfgLightHornMode.value === "middle" ? 1 : -1;
     } else if (telemetryState.unpaused.lights.high) {
         return utilStalkHighBeamCfgLightHornMode.value === "middle" ? 2 : 1;
@@ -337,58 +511,75 @@ const utilStalkHighBeam = computed((): number => {
     }
 });
 
-function utilStalkHighBeamStopMomentary() {
-    if (utilStalkHighBeamLightHornTimer.value !== undefined) {
-        window.clearTimeout(utilStalkHighBeamLightHornTimer.value);
-        utilStalkHighBeamLightHornTimer.value = undefined;
-    }
-}
-
-function utilStalkHighBeamStartMomentary() {
-    utilStalkHighBeamStopMomentary();
-    utilStalkHighBeamLightHornTimer.value = window.setTimeout(() => {
-        utilStalkHighBeamStopMomentary()
-    }, utilStalkHighBeamCfgLightHornMillis);
-}
-
-watch(utilStalkHighBeamLightHornTimer, (value: number | undefined) => {
-    if (value === undefined) {
-        gameSocket.releaseInput("lighthorn");
-    } else {
+watch(utilStalkHighBeamHorn, (value) => {
+    if (value) {
         gameSocket.holdInput("lighthorn");
+    } else {
+        gameSocket.releaseInput("lighthorn");
     }
 });
 
+function utilStalkHighBeamsStartHorn() {
+    utilStalkHighBeamHornHeld = true;
+    utilStalkHighBeamHorn.value = true;
+    if (utilStalkHighBeamMinimumTimer !== undefined) window.clearTimeout(utilStalkHighBeamMinimumTimer)
+    utilStalkHighBeamMinimumTimer = window.setTimeout(() => {
+        if (!utilStalkHighBeamHornHeld) {
+            utilStalkHighBeamHorn.value = false;
+        }
+        utilStalkHighBeamMinimumTimer = undefined;
+    }, 100);
+}
+
 function utilStalkHighBeamInc() {
+    utilStalkHighBeamHornHeld = false;
     switch (utilStalkHighBeam.value) {
         case -1:
-            utilStalkHighBeamStopMomentary();
+            utilStalkHighBeamHorn.value = false;
             break;
         case 0:
-            if (utilStalkHighBeamCfgLightHornMode.value === "middle") {
-                utilStalkHighBeamStartMomentary();
+            if (utilStalkHighBeamCfgLightHornMode.value === "middle" && utilStalkHighBeamSwipeTimer === undefined) {
+                utilStalkHighBeamsStartHorn();
             } else {
                 gameSocket.pressInput("hblight");
+                haptic();
             }
             break;
         case 1:
             if (utilStalkHighBeamCfgLightHornMode.value === "middle") {
-                utilStalkHighBeamStopMomentary();
+                utilStalkHighBeamHorn.value = false;
                 gameSocket.pressInput("hblight");
+                haptic();
             }
             break;
     }
 }
 
 function utilStalkHighBeamDec() {
+    utilStalkHighBeamHornHeld = false;
     if (utilStalkHighBeam.value > 0) {
         if (telemetryState.unpaused.lights.high) {
             gameSocket.pressInput("hblight");
+            haptic();
         }
-        utilStalkHighBeamStopMomentary();
+        utilStalkHighBeamHorn.value = false;
     } else if (utilStalkHighBeamCfgLightHornMode.value === "reverse") {
-        utilStalkHighBeamStartMomentary();
+        utilStalkHighBeamsStartHorn();
     }
+}
+
+function utilStalkHighBeamRel() {
+    utilStalkHighBeamHornHeld = false;
+
+    // Turn off the light horn only if the minimum timer has already expired.
+    if (utilStalkHighBeamMinimumTimer === undefined) {
+        utilStalkHighBeamHorn.value = false;
+    }
+
+    // Time within which a second swipe will still latch the high beams in
+    // "middle" mode.
+    if (utilStalkHighBeamSwipeTimer !== undefined) window.clearTimeout(utilStalkHighBeamSwipeTimer)
+    utilStalkHighBeamSwipeTimer = window.setTimeout(() => utilStalkHighBeamSwipeTimer = undefined, 500);
 }
 
 //-----------------------------------------------------------------------------
@@ -415,31 +606,13 @@ const utilStalkBlinkers = ref(0);
 // steering wheel moves far enough).
 const utilStalkBlinkersState = ref(0);
 
-// Timer for returning the stalk to its center position when giving momentary
-// input.
-let utilStalkBlinkersTimer: number | undefined = undefined;
-function utilStalkBlinkersRunTimer(enable: boolean) {
-    if (utilStalkBlinkersTimer !== undefined) {
-        window.clearTimeout(utilStalkBlinkersTimer);
-        utilStalkBlinkersTimer = undefined;
-    }
-    if (enable) {
-        utilStalkBlinkersTimer = window.setTimeout(() => {
-            utilStalkBlinkers.value = 0;
-            utilStalkBlinkersTimer = undefined;
-        }, 200);
-    }
-}
-
-// If the internal state changes, update the visual state, and maybe (re)start
-// the timer to reset it for momentary input.
+// If the internal state changes, update the visual state.
 let utilStalkBlinkersStatePrev: number = 0;
 watch(utilStalkBlinkersState, (value: number) => {
     // Vue probably does this as well, but just to be safe...
     if (value == utilStalkBlinkersStatePrev) return;
     utilStalkBlinkersStatePrev = value;
     utilStalkBlinkers.value = value / 2;
-    utilStalkBlinkersRunTimer(Math.abs(value) == 1);
 });
 
 // Number of flashes remaining for momentary mode.
@@ -448,6 +621,9 @@ let utilStalkBlinkersMomentaryRemain = 0;
 // Whether either blinker was on in the game before the following watch
 // callback. Previous value from Vue doesn't work for some reason.
 let utilStalkBlinkersPrevOn: boolean = false;
+
+// Timer for visually releasing the stalk, so the animations can play.
+let utilStalkBlinkersReleaseTimer: number | undefined = undefined;
 
 watch(telemetryState.unpaused.lights, (value: { turnLeft: null | boolean, turnRight: null | boolean }) => {
     // Turn off blinkers if stalk is in +/-1 position and the blinkers have
@@ -476,6 +652,7 @@ watch(telemetryState.unpaused.lights, (value: { turnSwSteer: null | number }) =>
     utilStalkBlinkersSteeringMax = Math.max(utilStalkBlinkersSteeringMax, steeringState);
     if (steeringState > utilStalkBlinkersSteeringMax - utilStalkBlinkersCfgAutoOffSensitivity) return;
     utilStalkBlinkersState.value = 0;
+    haptic();
 });
 
 watch(utilStalkBlinkersState, (value: number) => {
@@ -492,11 +669,15 @@ watch(utilStalkBlinkersState, (value: number) => {
 });
 
 function utilStalkBlinkersAdj(dir: "left" | "right") {
+    if (utilStalkBlinkersReleaseTimer !== undefined) window.clearTimeout(utilStalkBlinkersReleaseTimer);
+    utilStalkBlinkersReleaseTimer = undefined;
+
     const sign = {left: 1, right: -1}[dir];
     switch (utilStalkBlinkersState.value * sign) {
         case -2:
             utilStalkBlinkersMomentaryRemain = 0;
             utilStalkBlinkersState.value = 0;
+            haptic();
             break;
         case -1:
         case 0:
@@ -505,9 +686,9 @@ function utilStalkBlinkersAdj(dir: "left" | "right") {
                     utilStalkBlinkersMomentaryRemain = utilStalkBlinkersCfgMomentaryCount;
                     utilStalkBlinkersState.value = sign;
                 } else {
-                    // Hack: still show the animation when electricity is off.
+                    // Hack: still show the animation when electricity is off,
+                    // but don't wait for blinker flashes from the game.
                     utilStalkBlinkers.value = sign / 2;
-                    utilStalkBlinkersRunTimer(true);
                 }
                 break;
             }
@@ -515,8 +696,19 @@ function utilStalkBlinkersAdj(dir: "left" | "right") {
         case 1:
             utilStalkBlinkersSteeringMax = (telemetryState.unpaused.lights.turnSwSteer ?? 0) * sign;
             utilStalkBlinkersState.value = 2 * sign;
+            haptic();
             break;
     }
+}
+
+function utilStalkBlinkersRel() {
+    if (utilStalkBlinkersReleaseTimer !== undefined) window.clearTimeout(utilStalkBlinkersReleaseTimer);
+    utilStalkBlinkersReleaseTimer = window.setTimeout(() => {
+        utilStalkBlinkersReleaseTimer = undefined;
+        if (Math.abs(utilStalkBlinkers.value) < 0.6) {
+            utilStalkBlinkers.value = 0;
+        }
+    }, 100);
 }
 
 //-----------------------------------------------------------------------------
@@ -547,6 +739,7 @@ function utilStalkWipersInc() {
     if (utilStalkWipers.value < 3) {
         utilStalkWipers.value++;
         gameSocket.pressInput(`wipers${utilStalkWipers.value}`);
+        haptic();
     }
 }
 
@@ -554,6 +747,7 @@ function utilStalkWipersDec() {
     if (utilStalkWipers.value > 0) {
         utilStalkWipers.value--;
         gameSocket.pressInput(`wipers${utilStalkWipers.value}`);
+        haptic();
     }
 }
 
@@ -579,9 +773,11 @@ function transStalkDirectionInc() {
     switch (transDirection.value) {
         case "R":
             gameSocket.pressInput("gear0");
+            haptic();
             break;
         case "N":
             gameSocket.pressInput("geardrive");
+            haptic();
             break;
     }
 }
@@ -590,9 +786,11 @@ function transStalkDirectionDec() {
     switch (transDirection.value) {
         case "D":
             gameSocket.pressInput("gear0");
+            haptic();
             break;
         case "N":
             gameSocket.pressInput("gearreverse");
+            haptic();
             break;
     }
 }
@@ -619,12 +817,14 @@ const transStalkMode = computed((): number => {
 function transStalkModeInc() {
     if (transMode.value == "M") {
         gameSocket.pressInput("transemi");
+        haptic();
     }
 }
 
 function transStalkModeDec() {
     if (transMode.value == "A") {
         gameSocket.pressInput("transemi");
+        haptic();
     }
 }
 
@@ -648,24 +848,18 @@ function transStalkGearSyncCfg(configuration: ConfigurationData) {
 // Gear shift stalk position. Just for visual feedback.
 const transStalkGear = ref(0);
 
-// Timer for returning the stalk to its center position.
-let transStalkGearTimer: number | undefined = undefined;
-
-function transStalkGearStartTimer() {
-    if (transStalkGearTimer !== undefined) {
-        window.clearTimeout(transStalkGearTimer);
-    }
-    transStalkGearTimer = window.setTimeout(() => {
-        transStalkGear.value = 0;
-        transStalkGearTimer = undefined;
-    }, 200);
-}
+// Timer for visually releasing the stalk, so the animations can play.
+let transStalkGearReleaseTimer: number | undefined = undefined;
 
 function transStalkGearAdj(dir: "up" | "down") {
     if (transStalkGearCfgMode == "disabled") return;
 
-    transStalkGear.value = dir == "up" ? 1 : -1;
-    transStalkGearStartTimer();
+    if (transStalkGearReleaseTimer !== undefined) window.clearTimeout(transStalkGearReleaseTimer);
+    transStalkGearReleaseTimer = undefined;
+
+    const newState = dir == "up" ? 1 : -1;
+    if (newState == transStalkGear.value) return;
+    transStalkGear.value = newState;
 
     switch (transStalkGearCfgMode) {
         case "directWithHints":
@@ -704,6 +898,16 @@ function transStalkGearAdj(dir: "up" | "down") {
     }
 }
 
+function transStalkGearRel() {
+    if (transStalkGearCfgMode == "disabled") return;
+    if (transStalkGearReleaseTimer !== undefined) window.clearTimeout(transStalkGearReleaseTimer);
+    transStalkGearReleaseTimer = window.setTimeout(() => {
+        transStalkGearReleaseTimer = undefined;
+        transStalkGear.value = 0;
+    }, 100);
+}
+
+
 //-----------------------------------------------------------------------------
 // Engine brake and retarder logic
 //-----------------------------------------------------------------------------
@@ -718,20 +922,13 @@ function transStalkBrakeSyncCfg(configuration: ConfigurationData) {
 // Retarder stalk position. Just for visual feedback.
 const transStalkBrake = ref(0);
 
-// Timer for returning the stalk to its center position.
-let transStalkBrakeTimer: number | undefined = undefined;
-
-function transStalkBrakeStartTimer() {
-    if (transStalkBrakeTimer !== undefined) {
-        window.clearTimeout(transStalkBrakeTimer);
-    }
-    transStalkBrakeTimer = window.setTimeout(() => {
-        transStalkBrake.value = 0;
-        transStalkBrakeTimer = undefined;
-    }, 200);
-}
+// Timer for visually releasing the stalk, so the animations can play.
+let transStalkBrakeReleaseTimer: number | undefined = undefined;
 
 function transStalkBrakeAdj(dir: "inc" | "dec") {
+    if (transStalkBrakeReleaseTimer !== undefined) window.clearTimeout(transStalkBrakeReleaseTimer);
+    transStalkBrakeReleaseTimer = undefined;
+
     let mapToRetarder: boolean;
     let feedback = true;
     if (transStalkBrakeCfgMode == "retarder") {
@@ -743,16 +940,27 @@ function transStalkBrakeAdj(dir: "inc" | "dec") {
         mapToRetarder = (telemetryState.unpaused.brake.retarderMax ?? 0) > 0;
     }
 
+    let newState = 0;
     if (feedback) {
-        transStalkBrake.value = dir == "inc" ? 1 : -1;
-        transStalkBrakeStartTimer();
+        newState = dir == "inc" ? 1 : -1;
     }
+    if (newState != transStalkBrake.value) {
+        transStalkBrake.value = newState;
 
-    if (mapToRetarder) {
-        gameSocket.pressInput(dir == "inc" ? "retarderup" : "retarderdown");
-    } else {
-        gameSocket.pressInput(dir == "inc" ? "engbrakeup" : "engbrakedwn");
+        if (mapToRetarder) {
+            gameSocket.pressInput(dir == "inc" ? "retarderup" : "retarderdown");
+        } else {
+            gameSocket.pressInput(dir == "inc" ? "engbrakeup" : "engbrakedwn");
+        }
     }
+}
+
+function transStalkBrakeRel() {
+    if (transStalkBrakeReleaseTimer !== undefined) window.clearTimeout(transStalkBrakeReleaseTimer);
+    transStalkBrakeReleaseTimer = window.setTimeout(() => {
+        transStalkBrakeReleaseTimer = undefined;
+        transStalkBrake.value = 0;
+    }, 100);
 }
 
 //-----------------------------------------------------------------------------
@@ -761,31 +969,42 @@ function transStalkBrakeAdj(dir: "inc" | "dec") {
 
 // Semantical control events that can be sent to the game.
 export type GameInput
-    = "lowBeam-inc" | "lowBeam-dec"
-    | "highBeam-inc" | "highBeam-dec"
-    | "blinkers-inc" | "blinkers-dec"
-    | "wipers-inc" | "wipers-dec"
-    | "transGear-inc" | "transGear-dec"
-    | "transBrake-inc" | "transBrake-dec"
-    | "transDirection-inc" | "transDirection-dec"
-    | "transMode-inc" | "transMode-dec";
+    = "ignition-inc" | "ignition-dec" | "ignition-rel"
+    | "parkingBrake-inc" | "parkingBrake-dec" | "parkingBrake-rel"
+    | "lowBeam-inc" | "lowBeam-dec" | "lowBeam-rel"
+    | "highBeam-inc" | "highBeam-dec" | "highBeam-rel"
+    | "blinkers-inc" | "blinkers-dec" | "blinkers-rel"
+    | "wipers-inc" | "wipers-dec" | "wipers-rel"
+    | "transGear-inc" | "transGear-dec" | "transGear-rel"
+    | "transBrake-inc" | "transBrake-dec" | "transBrake-rel"
+    | "transDirection-inc" | "transDirection-dec" | "transDirection-rel"
+    | "transMode-inc" | "transMode-dec" | "transMode-rel";
 
 // Sends commands to the game. This is mostly just a translation step between
 // TruckDash actions and semantic input for the game engine.
 function sendToGame(input: GameInput) {
     switch (input) {
+        case "ignition-inc": ignitionSwitchInc(); break;
+        case "ignition-dec": ignitionSwitchDec(); break;
+        case "ignition-rel": ignitionSwitchRel(); break;
+        case "parkingBrake-inc": parkingBrakeSet(); break;
+        case "parkingBrake-dec": parkingBrakeRelease(); break;
         case "lowBeam-inc": utilStalkLowBeamInc(); break;
         case "lowBeam-dec": utilStalkLowBeamDec(); break;
         case "highBeam-inc": utilStalkHighBeamInc(); break;
         case "highBeam-dec": utilStalkHighBeamDec(); break;
+        case "highBeam-rel": utilStalkHighBeamRel(); break;
         case "blinkers-inc": utilStalkBlinkersAdj("left"); break;
         case "blinkers-dec": utilStalkBlinkersAdj("right"); break;
+        case "blinkers-rel": utilStalkBlinkersRel(); break;
         case "wipers-inc": utilStalkWipersInc(); break;
         case "wipers-dec": utilStalkWipersDec(); break;
         case "transGear-inc": transStalkGearAdj("up"); break;
         case "transGear-dec": transStalkGearAdj("down"); break;
+        case "transGear-rel": transStalkGearRel(); break;
         case "transBrake-inc": transStalkBrakeAdj("inc"); break;
         case "transBrake-dec": transStalkBrakeAdj("dec"); break;
+        case "transBrake-rel": transStalkBrakeRel(); break;
         case "transDirection-inc": transStalkDirectionInc(); break;
         case "transDirection-dec": transStalkDirectionDec(); break;
         case "transMode-inc": transStalkModeInc(); break;
@@ -834,7 +1053,8 @@ export function useGame(configuration: Configuration): { gameState: GameState, s
                 displayBrightness,
                 indicatorBrightness,
                 integratedLightingBrightness,
-                highBeamIndicatorOverride,
+                ignitionSwitch,
+                highBeamIndicatorOverride: utilStalkHighBeamHorn,
                 transMode,
                 transDirection,
                 transGearIndex,

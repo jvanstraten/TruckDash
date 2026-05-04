@@ -1,6 +1,7 @@
 <script setup lang="ts" xmlns="http://www.w3.org/1999/html">
 
-import type {UiPosition} from "~/types/globals";
+import type { UiPosition } from "~/composables/configuration";
+import {type GestureData, useGestureDetection} from "~/composables/gestureDetection";
 
 const uiConfig = defineModel<UiPosition>();
 
@@ -13,6 +14,8 @@ const props = defineProps<{
   alignY?: number,
 }>();
 
+const emit = defineEmits(["exitAdjust"]);
+
 type Coordinate = {
   x: number;
   y: number;
@@ -21,6 +24,20 @@ type Coordinate = {
 //-----------------------------------------------------------------------------
 // Handle dragging to adjust positioning
 //-----------------------------------------------------------------------------
+
+function gestureCallback(gesture: GestureData): undefined {
+  if (gesture.type == "click") {
+    emit('exitAdjust');
+  }
+}
+
+const {
+  onPointerDown: onPointerDownGesture,
+  onPointerMove: onPointerMoveGesture,
+  onPointerUp: onPointerUpGesture,
+  onPointerCancel: onPointerCancelGesture,
+  onClick,
+} = useGestureDetection(gestureCallback);
 
 const dragData = ref<{
   ctrlPt: "top" | "1" | "2";
@@ -32,6 +49,8 @@ const dragData = ref<{
 } | null>(null);
 
 function onPointerDown(event: PointerEvent) {
+  onPointerDownGesture(event);
+
   const target = event.target as HTMLElement;
   target.setPointerCapture(event.pointerId);
 
@@ -67,7 +86,9 @@ function clampDelta(delta: number, start: number): number {
   return delta;
 }
 
-function onPointerMove(event: MouseEvent) {
+function onPointerMove(event: PointerEvent) {
+  onPointerMoveGesture(event);
+
   const data = dragData.value;
   if (data === null) return;
   if (uiConfig.value === undefined) return;
@@ -98,11 +119,14 @@ function onPointerMove(event: MouseEvent) {
   }
 }
 
-function onClick(event: MouseEvent) {
+function onPointerUp(event: PointerEvent) {
+  onPointerUpGesture(event);
   onPointerMove(event);
-  if (dragData.value && dragData.value.moved) {
-    event.stopPropagation();
-  }
+  dragData.value = null;
+}
+
+function onPointerCancel(event: PointerEvent) {
+  onPointerCancelGesture(event);
   dragData.value = null;
 }
 
@@ -231,27 +255,33 @@ const cp2Coords = computed(() => {
       class="uic-adjuster"
       :style="fullCoords"
       data-ctrl-pt="top"
+      @pointerdown="onPointerDown($event)"
+      @pointermove="onPointerMove($event)"
+      @pointerup="onPointerUp($event)"
+      @pointercancel="onPointerCancel($event)"
       @click="onClick($event)"
-      @pointerdown.stop.prevent="onPointerDown($event)"
-      @pointermove.stop.prevent="onPointerMove($event)"
   />
   <div
       v-if="props.adjust"
       class="uic-control-point"
       :style="cp1Coords"
       data-ctrl-pt="1"
+      @pointerdown="onPointerDown($event)"
+      @pointermove="onPointerMove($event)"
+      @pointerup="onPointerUp($event)"
+      @pointercancel="onPointerCancel($event)"
       @click="onClick($event)"
-      @pointerdown.stop.prevent="onPointerDown($event)"
-      @pointermove.stop.prevent="onPointerMove($event)"
   />
   <div
       v-if="props.adjust"
       class="uic-control-point"
       :style="cp2Coords"
       data-ctrl-pt="2"
+      @pointerdown="onPointerDown($event)"
+      @pointermove="onPointerMove($event)"
+      @pointerup="onPointerUp($event)"
+      @pointercancel="onPointerCancel($event)"
       @click="onClick($event)"
-      @pointerdown.stop.prevent="onPointerDown($event)"
-      @pointermove.stop.prevent="onPointerMove($event)"
   />
 
 </template>
@@ -265,6 +295,7 @@ const cp2Coords = computed(() => {
   display: flex;
   justify-content: center;
   align-items: center;
+  touch-action: none;
 }
 
 .uic-border {

@@ -56,65 +56,88 @@ const onGestureDecoded = computed(() => {
 const { decodeGesture, gestureMapping } = useGestureControls(configuration, stalkMap, onGestureDecoded);
 
 // Toplevel gesture routing.
-function onGesture(data: GestureData) {
+function onGesture(data: GestureData): boolean {
 
   // Override all gesture behavior if the UI is being adjusted.
   if (adjust) {
     if (data.type == "click") {
       emit("menu");
     }
-    return;
+    return false;
   }
 
   // Decode the gesture to a control action based on the current input map.
-  const action = decodeGesture(data);
+  let action = undefined;
+  try {
+    action = decodeGesture(data);
+    pushGestureLog(`Mapping: ${action}`);
+  } catch (e) {
+    pushGestureLog(`Error decoding: ${e}`);
+  }
 
   // Handle menu.
   if (action == "menu") {
     emit("menu");
-    return;
+    return !data.last;
   }
 
   // Don't actually send events to the game when mapping is active.
-  if (mapping) return;
+  if (!mapping) {
 
-  // Get rid of inputs not addressed to the game.
-  if (action === undefined) return;
-  if (action === "layer") return;
+    // Get rid of inputs not addressed to the game.
+    if (action === undefined) return !data.last;
+    if (action === "layer") return !data.last;
 
-  let [axis, dir] = action;
-  if (axis === "unmapped") return;
-  if (axis === "highBeamReverseHorn") axis = "highBeam";
-  if (axis === "highBeamCenterHorn") axis = "highBeam";
-  sendToGame(`${axis}-${dir}`);
+    // Handle stalk commands.
+    let [axis, dir] = action;
+    if (axis === "unmapped") return !data.last;
+    if (axis === "highBeamReverseHorn") axis = "highBeam";
+    if (axis === "highBeamCenterHorn") axis = "highBeam";
+    sendToGame(`${axis}-${dir}`);
+
+  }
+  return !data.last;
+
 }
 
-const enableGestureDebugging: boolean = true;
+const enableGestureDebugging: boolean = false;
 
 const gestureDebug = ref<string>("...");
 const gestureDebugHistory = ref<string[]>([]);
 const gestures = useGestureDetection(
-    onGesture, {}, enableGestureDebugging ? gestureDebug : undefined);
+    onGesture, {
+      receiveSwipes: true,
+      receiveHolds: true,
+      receiveRotations: true,
+      receiveMultiTouch: true,
+    }, enableGestureDebugging ? gestureDebug : undefined);
 
+function pushGestureLog(s: string) {
+  if (gestureDebugHistory.value.length > 50) gestureDebugHistory.value.splice(0, 1);
+  gestureDebugHistory.value.push(s);
+}
 watch(gestureDebug, () => {
-  if (gestureDebugHistory.value.length > 50) gestureHistory.value.splice(0);
-  gestureDebugHistory.value.push(gestureDebug.value);
+  pushGestureLog(gestureDebug.value);
 });
 
 </script>
 
 <template>
+  <!-- touchstart.prevent: stops long press from opening context menu on chrome android, doesn't *seem* to have adverse effects on others -->
   <div
       class="workspace"
       :style="{'background-color': configuration.themeWorkspaceFollowsBackground ? shading.background : configuration.themeWorkspace}"
       @pointerdown="gestures.onPointerDown"
       @pointermove="gestures.onPointerMove"
       @pointerup="gestures.onPointerUp"
+      @pointerleave="gestures.onPointerUp"
       @pointercancel="gestures.onPointerCancel"
       @click="gestures.onClick"
+      @touchstart.prevent
   >
     <uiContainer
         :adjust="adjust"
+        @exitAdjust="emit('menu')"
         v-if="configuration.layoutInstrumentsEnabled"
         v-model="configuration.layoutInstrumentsPosition"
         :aspect="13/6"
@@ -128,6 +151,7 @@ watch(gestureDebug, () => {
 
     <uiContainer
         :adjust="adjust"
+        @exitAdjust="emit('menu')"
         v-if="configuration.layoutLeftStalkEnabled"
         v-model="configuration.layoutLeftStalkPosition"
         :minAspect="1.5"
@@ -148,6 +172,7 @@ watch(gestureDebug, () => {
 
     <uiContainer
         :adjust="adjust"
+        @exitAdjust="emit('menu')"
         v-if="configuration.layoutRightStalkEnabled"
         v-model="configuration.layoutRightStalkPosition"
         :minAspect="1.5"
@@ -168,6 +193,7 @@ watch(gestureDebug, () => {
 
     <uiContainer
         :adjust="adjust"
+        @exitAdjust="emit('menu')"
         v-if="configuration.layoutDisplay1Address"
         v-model="configuration.layoutDisplay1Position"
     >
@@ -182,6 +208,7 @@ watch(gestureDebug, () => {
 
     <uiContainer
         :adjust="adjust"
+        @exitAdjust="emit('menu')"
         v-if="configuration.layoutDisplay2Address"
         v-model="configuration.layoutDisplay2Position"
     >
@@ -196,7 +223,7 @@ watch(gestureDebug, () => {
 
     <v-snackbar-queue
         v-model="gestureHistory"
-        :close-delay="200000"
+        :close-delay="2000"
         location="bottom end"
         display-strategy="overflow"
         :total-visible="10"

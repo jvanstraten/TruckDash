@@ -232,6 +232,7 @@ export function useInstruments(gameState: GameState, configuration: Configuratio
                 return `!${hrs}:${min}`;
             }),
             deadline: computed((): string => {
+                if (!gameState.unpaused.electric.enabled) return "";
                 const time = gameState.unpaused.time.current;
                 if (typeof time != "number") return "";
                 const exp = gameState.unpaused.time.jobExpected;
@@ -239,17 +240,20 @@ export function useInstruments(gameState: GameState, configuration: Configuratio
                 return remainingTimeDisplay(exp - time);
             }),
             eta: computed((): string => {
+                if (!gameState.unpaused.electric.enabled) return "";
                 let remain = gameState.unpaused.time.navRemain;
                 if (typeof remain != "number") return "";
                 return remainingTimeDisplay(remain);
             }),
             rest: computed((): string => {
+                if (!gameState.unpaused.electric.enabled) return "";
                 let remain = gameState.unpaused.time.restRemain;
                 if (typeof remain != "number") return "";
                 if (remain <= 0 && configuration.value.prefFlashRestIndicator && !blink.value) return "";
                 return remainingTimeDisplay(remain);
             }),
             odometer: computed((): string => {
+                if (!gameState.unpaused.electric.enabled) return "";
                 let odo = gameState.unpaused.axles.odo;
                 if (typeof odo != "number") return "";
                 odo = Math.floor(odo);
@@ -257,12 +261,15 @@ export function useInstruments(gameState: GameState, configuration: Configuratio
                 return odo.toString().padStart(6, "0");
             }),
             gearCruiseL: computed((): string => {
+                if (!gameState.unpaused.electric.enabled) return "";
                 return (gearCruise.value + "!!")[0] as string;
             }),
             gearCruiseR: computed((): string => {
+                if (!gameState.unpaused.electric.enabled) return "";
                 return (gearCruise.value + "!!")[1] as string;
             }),
             cruiseControl: computed((): string => {
+                if (!gameState.unpaused.electric.enabled) return "";
                 const config = configuration.value;
                 let cc = gameState.unpaused.util.cruiseControl;
                 let speed = gameState.unpaused.axles.speed;
@@ -289,8 +296,9 @@ export function useInstruments(gameState: GameState, configuration: Configuratio
                 return value.toString().padStart(2, "!");
             }),
             retarder: computed((): string => {
+                if (!gameState.unpaused.electric.enabled) return "";
                 if (gameState.unpaused.brake.retarder) return gameState.unpaused.brake.retarder.toString();
-                return "!";
+                return "";
             }),
         },
         indicators: {

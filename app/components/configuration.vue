@@ -278,7 +278,7 @@ const chosenFile = ref();
             value="disabled"
         />
 
-        <v-list-subheader>Gesture zones per stalk</v-list-subheader>
+        <v-list-subheader>Stalk gesture behavior</v-list-subheader>
         <configRadio
             title="Two zones, outer controls switches"
             subtitle="The swipe zone for each stalk is vertically divided in two. The outer half controls the switches on the stalk, while the inner half moves the stalk itself."
@@ -302,6 +302,12 @@ const chosenFile = ref();
             v-model="configuration.stalkGestureSwitches"
             joiner="last"
             value="click"
+        />
+        <configBool
+            title="Long swipes"
+            subtitle="When enabled, you can swipe longer distances to move a stalk or switch by more than one position. When disabled, you need to swipe multiple times to advance by multiple positions."
+            :enabled="configuration.stalkGestureMode != 'disabled'"
+            v-model="configuration.stalkMultiSwipe"
         />
 
         <v-list-subheader>Menu entry</v-list-subheader>
@@ -413,22 +419,6 @@ const chosenFile = ref();
             v-model="configuration.stalkLightHornMode"
             joiner="last"
             value="disabled"
-        />
-        <configRadio
-            title="Long light horn duration"
-            subtitle="A high-beam flash lasts for about a second."
-            v-model="configuration.stalkLightHornTimer"
-            :enabled="configuration.stalkLightHornMode != 'disabled'"
-            joiner="first"
-            :value="800"
-        />
-        <configRadio
-            title="Short light horn duration"
-            subtitle="A high-beam flash is really just a flash."
-            v-model="configuration.stalkLightHornTimer"
-            :enabled="configuration.stalkLightHornMode != 'disabled'"
-            joiner="last"
-            :value="300"
         />
         <configBool
             title="Invert high-beam switch"

@@ -22,7 +22,7 @@ function onGesture(data: GestureData) {
   }
 }
 
-const gestures = useGestureDetection(onGesture);
+const gestures = useGestureDetection(onGesture, { receiveHolds: true });
 let pointerDown: boolean = false;
 
 function closeTooltip() {
