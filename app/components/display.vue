@@ -49,7 +49,7 @@ function handleStartup() {
 
 function powerUp() {
   stopTimer();
-  if (configuration.prefDisplayStartup) {
+  if (configuration.instrDisplayStartup) {
     powerState.value = powerStateLightOn;
     handleStartup();
   } else {
@@ -78,7 +78,7 @@ const prevElectricEnabled = ref<boolean>(false);
 
 watch(gameState.unpaused.electric, (a, b) => {
   const electricEnabled = gameState.unpaused.electric.enabled == true;
-  if (configuration.prefDisplayFollowsTruck) {
+  if (configuration.instrDisplayFollowsTruck) {
     if (electricEnabled && !prevElectricEnabled.value) {
       if (powerState.value <= powerStateStandby) {
         powerUp();
@@ -86,7 +86,7 @@ watch(gameState.unpaused.electric, (a, b) => {
         stopTimer();
       }
     } else if (!electricEnabled && prevElectricEnabled.value) {
-      timer = window.setTimeout(() => powerDown(configuration.prefDisplayStandby), 800);
+      timer = window.setTimeout(() => powerDown(configuration.instrDisplayStandby), 800);
     }
   }
   prevElectricEnabled.value = electricEnabled;
@@ -137,7 +137,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div :class="['display-bezel', configuration.perfShadows ? 'display-bezel-shaded' : '']" :style="{'background-color': shading.background}">
+  <div :class="['display-bezel', configuration.perfOcclusion ? 'display-bezel-shaded' : '']" :style="{'background-color': shading.background}">
     <div class="display-lcd-outer">
       <div class="display-lcd-inner" ref="lcd">
         <iframe
@@ -162,11 +162,11 @@ onUnmounted(() => {
       </div>
     </div>
     <div
-        :class="['display-power-outer', configuration.perfShadows ? 'display-power-outer-shaded' : '']"
+        :class="['display-power-outer', configuration.perfOcclusion ? 'display-power-outer-shaded' : '']"
         @pointerup.stop.prevent="togglePower()" @pointermove.stop @pointerdown.stop
     >
       <div
-          :class="['display-power-inner', configuration.perfShadows ? ' display-power-inner-shaded' : '']"
+          :class="['display-power-inner', configuration.perfOcclusion ? ' display-power-inner-shaded' : '']"
           :style="shading.divIndicator[powerState < powerStateOn ? 'amber' : 'green'][powerState >= powerStateLightOn ? 'on' : 'off']"
       />
     </div>

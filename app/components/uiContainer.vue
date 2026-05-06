@@ -37,7 +37,11 @@ const {
   onPointerUp: onPointerUpGesture,
   onPointerCancel: onPointerCancelGesture,
   onClick,
-} = useGestureDetection(gestureCallback);
+} = useGestureDetection(gestureCallback, {
+    // Be strict, so small adjustments are not misinterpreted as clicks.
+    maximumTapDistanceRatio: () => 0.01,
+    holdTimeout: () => 100,
+});
 
 const dragData = ref<{
   ctrlPt: "top" | "1" | "2";

@@ -153,15 +153,15 @@ export function useInstruments(gameState: GameState, configuration: Configuratio
 
     const gearCruise = computed(() => {
         const config = configuration.value;
-        if (config.prefGearDisplayMode == "speed") {
+        if (config.instrGearDisplayMode == "speed") {
             let speed = gameState.unpaused.axles.speed;
             if (typeof speed != "number") return "!!";
-            const factor = config.prefSpeedUnit == "mph" ? mpsToMph : mpsToKmh;
+            const factor = config.generalSpeedUnit == "mph" ? mpsToMph : mpsToKmh;
             const value = Math.min(Math.round(Math.abs(speed) * factor / 100), 99);
             return value.toString().padStart(2, "!");
         }
         let gear;
-        if (config.prefGearDisplayMode == "realGear") {
+        if (config.instrGearDisplayMode == "realGear") {
             gear = gameState.unpaused.transmission.realGear;
         } else {
             gear = gameState.unpaused.transmission.indicatedGear;
@@ -177,9 +177,10 @@ export function useInstruments(gameState: GameState, configuration: Configuratio
         if (typeof speed != "number") return 0;
         speed /= 100; // scale in config.yaml
         const max = gameState.unpaused.util.speedLimit;
+        const tol = (configuration.value.instrStrictOverspeed ? 2 : 6) / 3.6;
         if (typeof max != "number" || max <= 0) return 0;
-        if (speed > max + 3) return 2;
-        if (speed > max + 1) return 1;
+        if (speed > max + tol) return 2;
+        if (speed > max + tol) return 1;
         return 0;
     }
 
@@ -215,11 +216,11 @@ export function useInstruments(gameState: GameState, configuration: Configuratio
                 const config = configuration.value;
                 let time = gameState.unpaused.time.current;
                 if (typeof time != "number") return "";
-                time += config.prefClockOffset * 60;
+                time += config.instrClockOffset * 60;
                 time = Math.floor(time);
                 const min = (time % 60).toString().padStart(2, "0");
                 time = Math.floor(time / 60) % 24;
-                if (config.prefClock12) {
+                if (config.general12HourTime) {
                     instruments.indicators.clockAm.value = time < 12;
                     instruments.indicators.clockPm.value = time >= 12;
                     time %= 12;
@@ -249,7 +250,7 @@ export function useInstruments(gameState: GameState, configuration: Configuratio
                 if (!gameState.unpaused.electric.enabled) return "";
                 let remain = gameState.unpaused.time.restRemain;
                 if (typeof remain != "number") return "";
-                if (remain <= 0 && configuration.value.prefFlashRestIndicator && !blink.value) return "";
+                if (remain <= 0 && configuration.value.instrFlashRestIndicator && !blink.value) return "";
                 return remainingTimeDisplay(remain);
             }),
             odometer: computed((): string => {
@@ -275,14 +276,14 @@ export function useInstruments(gameState: GameState, configuration: Configuratio
                 let speed = gameState.unpaused.axles.speed;
                 let val = null;
                 if (typeof speed == "number") speed = Math.abs(speed) / 100;
-                if (config.prefCruiseDisplayMode == "speedAlways") {
+                if (config.instrCruiseDisplayMode == "speedAlways") {
                     // Ignore cruise control value.
                     val = speed;
                 } else if (typeof cc != "number" || cc <= 0) {
                     // Cruise control is off.
-                    if (config.prefCruiseDisplayMode == "retain") {
+                    if (config.instrCruiseDisplayMode == "retain") {
                         val = lastCruiseControl;
-                    } else if (config.prefCruiseDisplayMode == "speedWhenDisabled") {
+                    } else if (config.instrCruiseDisplayMode == "speedWhenDisabled") {
                         val = speed;
                     }
                 } else {
@@ -291,7 +292,7 @@ export function useInstruments(gameState: GameState, configuration: Configuratio
                     lastCruiseControl = cc;
                 }
                 if (typeof val != "number") return "";
-                const factor = config.prefSpeedUnit == "mph" ? mpsToMph : mpsToKmh;
+                const factor = config.generalSpeedUnit == "mph" ? mpsToMph : mpsToKmh;
                 const value = Math.min(Math.round(val * factor), 99);
                 return value.toString().padStart(2, "!");
             }),
@@ -423,7 +424,7 @@ export function useInstruments(gameState: GameState, configuration: Configuratio
                 if (systemChecks.lamps.value) return true;
                 const severity = computeSpeedingSeverity();
                 if (severity < 1) return false;
-                if (severity >= 2 && configuration.value.prefFlashOverspeed) return blink.value;
+                if (severity >= 2 && configuration.value.instrFlashOverspeed) return blink.value;
                 return true;
             }),
             transmission: computed((): boolean => {
@@ -448,12 +449,12 @@ export function useInstruments(gameState: GameState, configuration: Configuratio
             clockPm: ref(false),
             transAuto: computed((): boolean => {
                 if (!gameState.unpaused.electric.enabled) return false;
-                if (configuration.value.prefGearDisplayMode == "speed") return false;
+                if (configuration.value.instrGearDisplayMode == "speed") return false;
                 return gameState.derived.transMode.value == "A";
             }),
             transManual: computed((): boolean => {
                 if (!gameState.unpaused.electric.enabled) return false;
-                if (configuration.value.prefGearDisplayMode == "speed") return false;
+                if (configuration.value.instrGearDisplayMode == "speed") return false;
                 return gameState.derived.transMode.value == "M";
             }),
         },
@@ -557,7 +558,7 @@ export function useInstruments(gameState: GameState, configuration: Configuratio
         }
 
         // Whether to run self-tests.
-        const runTests = config.prefSelfTest;
+        const runTests = config.instrSelfTest;
 
         // Model startup/self-tests of electrical systems.
         systemChecks.lamps.value = runTests && power && electricEnabledMillis < 1000;
@@ -577,10 +578,10 @@ export function useInstruments(gameState: GameState, configuration: Configuratio
 
         // Animate needles.
         let fuelNeedleTarget = needleTargets.fuel.value;
-        if (config.prefFuelFollowsAdBlue && needleTargets.adBlue.value < fuelNeedleTarget) {
+        if (config.instrFuelFollowsAdBlue && needleTargets.adBlue.value < fuelNeedleTarget) {
             fuelNeedleTarget = needleTargets.adBlue.value;
         }
-        const needleTest = config.prefSelfTestNeedle && power && electricEnabledMillis < 1500;
+        const needleTest = config.instrSelfTestNeedle && power && electricEnabledMillis < 1500;
         updateNeedle(instruments.needles.air, needleTargets.air.value, power, needleTest, design.ncfg.air, 6, timeDelta);
         updateNeedle(instruments.needles.coolant, needleTargets.coolant.value, power, needleTest, design.ncfg.coolant, 4.5, timeDelta);
         updateNeedle(instruments.needles.fuel, fuelNeedleTarget, power, needleTest, design.ncfg.fuel, 4, timeDelta);

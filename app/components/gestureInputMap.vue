@@ -53,8 +53,8 @@ const {
         <gestureAction :action="gestureMapping.hold" size="3cqw"/>
       </div>
       <div class="workspace-click-cell" style="grid-area: 1 / 7 / 2 / 9">
-        <gestureAction :action="gestureMapping.ccw" size="3cqw"/>
-        <v-icon size="2cqw" color="#FFF8" style="margin-left: 0.5cqw; margin-right: -0.5cqw">mdi-sync</v-icon>
+        <gestureAction :action="gestureMapping.hold2" size="3cqw"/>
+        <v-icon size="3cqw" color="#FFF8" style="margin-left: -0.7cqw; margin-right: -1.3cqw">mdi-circle-small</v-icon>
         <v-icon size="3cqw" color="#FFF8">mdi-gesture-two-tap</v-icon>
         <v-icon size="2cqw" color="#FFF8" style="margin-left: -0.5cqw; margin-right: 0.5cqw">mdi-autorenew</v-icon>
         <gestureAction :action="gestureMapping.cw" size="3cqw"/>

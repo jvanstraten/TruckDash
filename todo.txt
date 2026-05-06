@@ -1,32 +1,37 @@
-collapse control UI when some switch axes are unused so they don't look so derpy in that case
+panels:
+    collapse control UI when some switch axes are unused so they don't look so derpy in that case
+    ignition key panel
+    parking brake panel
 
-configurable mappings for ignition and parking
-ignition key panel
-parking brake panel
+    maybe someday, panels with buttons for:
+        trailer hook (button)
+        diff lock (telemetry switch)
+        truck lift axle (telemetry switch)
+        trailer lift axle (telemetry switch)
+        beacon (telemetry switch)
+        hazard lights (telemetry switch)
+        cruise control main (button)
+        cruise control up (button)
+        cruise control down (button)
+        cruise control resume (button)
+        cruise control adaptive mode (button)
+        lane assist mode (button)
 
-button panel & quick-access in main menu!
+        https://sortablejs.github.io/vue.draggable.next/#/two-lists to configure?
 
-    trailer hook (button)
-    diff lock (telemetry switch)
-    truck lift axle (telemetry switch)
-    trailer lift axle (telemetry switch)
-    beacon (telemetry switch)
-    hazard lights (telemetry switch)
-    cruise control main (button)
-    cruise control up (button)
-    cruise control down (button)
-    cruise control resume (button)
-    cruise control adaptive mode (button)
-    lane assist mode (button)
+UI:
+    configuration sync with server now that I had to add user data to TruckTel anyway
+    first run tutorial/setup
 
-    https://sortablejs.github.io/vue.draggable.next/#/two-lists to configure?
+behavior:
+    fix timezone for shading; game time is CEST, not UTC
+    engine start animation/dimming of lights
+    forcing engine stall?
+    better check engine/transmission light, or at least make it configurable
 
-engine start animation/dimming of lights
-better check engine/transmission light, or at least make it configurable
-configuration sync with server now that I had to add user data to TruckTel anyway
-first run tutorial/setup
-refactor configuration key names
-maybe some docstrings or something, at least for the files...
+internal:
+    maybe some docstrings or something, at least for the files...
+
 blackjack
 hookers
 ?????

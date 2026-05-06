@@ -72,7 +72,7 @@ export function useShading(gameState: GameState, configuration: Configuration): 
         // Guestimate longitude from game z coordinate if timezone simulation is
         // enabled. If not, the game does not adjust sun position based on
         // longitude, so use a default value.
-        const lon = configuration.value.prefTimezones ? longitude.value : 5;
+        const lon = configuration.value.themeShadingTimezones ? longitude.value : 5;
 
         // env_data.sii suggests that the day of the year that the game works with
         // is the summer solstice, though it doesn't suggest which year. Using 2000
@@ -92,7 +92,7 @@ export function useShading(gameState: GameState, configuration: Configuration): 
     });
 
     const ambientLevel = computed(() => {
-        if (!configuration.value.prefShading) return 1.0;
+        if (!configuration.value.themeShading) return 1.0;
         const amount = (Math.tanh((sunAltitude.value - 5) / 15) + 1) / 2;
         return Math.round(amount * 100) / 100;
     });
@@ -152,7 +152,7 @@ export function useShading(gameState: GameState, configuration: Configuration): 
             // Determine CSS properties.
             const glowFilter: string = cfg.perfBloom ? `drop-shadow(0px 0px 5px ${glow.toHex()})` : "";
             const glowFilterDiv: string = cfg.perfBloom ? `drop-shadow(0 0 1em ${glow.toHex()})` : "";
-            const shadowFilter: string = cfg.perfShadows ? "drop-shadow(0px 0px 20px #0008)" : "";
+            const shadowFilter: string = cfg.perfOcclusion ? "drop-shadow(0px 0px 20px #0008)" : "";
             const transition: string = cfg.perfAnimateIndicators ? "fill 0.1s" : "none";
             const needleStroke: string = cfg.perfNeedleDetails ? cfg.themeNeedleStroke : "none";
 
@@ -227,7 +227,7 @@ export function useShading(gameState: GameState, configuration: Configuration): 
         // and thus doesn't need an alternate color. When shadows are disabled,
         // darken it a little bit instead.
         let lowerBackground = background;
-        if (!configuration.value.perfShadows) {
+        if (!configuration.value.perfOcclusion) {
             lowerBackground = lowerBackground.adjustLightness(-3);
         }
 

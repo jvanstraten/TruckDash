@@ -16,7 +16,12 @@ function describeActionWithIcons(action: ControlAction): string[] {
     layer: ["layers-plus"],
     menu: ["menu"],
   }[action];
+  if (action[1] == "rel") return [];
   return {
+    activate: {
+      inc: ["check"],
+      dec: ["check"],
+    },
     ignition: {
       inc: ["engine-outline"],
       dec: ["engine-off-outline"],

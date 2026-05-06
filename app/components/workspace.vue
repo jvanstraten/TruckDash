@@ -67,7 +67,7 @@ function onGesture(data: GestureData): boolean {
   }
 
   // Decode the gesture to a control action based on the current input map.
-  let action = undefined;
+  let action: ControlAction | undefined = undefined;
   try {
     action = decodeGesture(data);
     pushGestureLog(`Mapping: ${action}`);
@@ -88,7 +88,7 @@ function onGesture(data: GestureData): boolean {
     if (action === undefined) return !data.last;
     if (action === "layer") return !data.last;
 
-    // Handle stalk commands.
+    // Handle axis commands.
     let [axis, dir] = action;
     if (axis === "unmapped") return !data.last;
     if (axis === "highBeamReverseHorn") axis = "highBeam";
@@ -110,6 +110,8 @@ const gestures = useGestureDetection(
       receiveHolds: true,
       receiveRotations: true,
       receiveMultiTouch: true,
+      minimumDistanceRatio: () => configuration.value.gestureSwipeSensitivity,
+      holdTimeout: () => configuration.value.gestureHoldTimer,
     }, enableGestureDebugging ? gestureDebug : undefined);
 
 function pushGestureLog(s: string) {

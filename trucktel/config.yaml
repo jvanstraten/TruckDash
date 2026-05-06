@@ -193,50 +193,53 @@ custom-structures:
 
 input:
   binary:
+    # Environment interaction.
+    activate: TruckDash gesture
+
     # Ignition key.
-    ignitionoff: TruckDash swipe
-    ignitionon: TruckDash swipe
-    ignitionstrt: TruckDash swipe
+    ignitionoff: TruckDash gesture
+    ignitionon: TruckDash gesture
+    ignitionstrt: TruckDash gesture
 
     # Parking brake.
-    parkingbrake: TruckDash swipe
+    parkingbrake: TruckDash gesture
 
     # Utility stalk horizontal move.
-    hblight: TruckDash swipe
-    lighthorn: TruckDash swipe
+    hblight: TruckDash gesture
+    lighthorn: TruckDash gesture
 
     # Utility stalk vertical move.
-    lblinkerh: TruckDash swipe
-    rblinkerh: TruckDash swipe
+    lblinkerh: TruckDash gesture
+    rblinkerh: TruckDash gesture
 
     # Utility stalk horizontal switch.
-    lightoff: TruckDash swipe
-    lightpark: TruckDash swipe
-    lighton: TruckDash swipe
+    lightoff: TruckDash gesture
+    lightpark: TruckDash gesture
+    lighton: TruckDash gesture
 
     # Utility stalk vertical switch.
-    wipers0: TruckDash swipe
-    wipers1: TruckDash swipe
-    wipers2: TruckDash swipe
-    wipers3: TruckDash swipe
-    wipers4: TruckDash swipe
+    wipers0: TruckDash gesture
+    wipers1: TruckDash gesture
+    wipers2: TruckDash gesture
+    wipers3: TruckDash gesture
+    wipers4: TruckDash gesture
 
     # Transmission stalk horizontal move.
-    engbrakeup: TruckDash swipe
-    engbrakedwn: TruckDash swipe
-    retarderup: TruckDash swipe
-    retarderdown: TruckDash swipe
+    engbrakeup: TruckDash gesture
+    engbrakedwn: TruckDash gesture
+    retarderup: TruckDash gesture
+    retarderdown: TruckDash gesture
 
     # Transmission stalk vertical move.
-    gearup: TruckDash swipe
-    geardown: TruckDash swipe
-    gearuphint: TruckDash swipe
-    geardownhint: TruckDash swipe
+    gearup: TruckDash gesture
+    geardown: TruckDash gesture
+    gearuphint: TruckDash gesture
+    geardownhint: TruckDash gesture
 
     # Transmission stalk horizontal switch.
-    transemi: TruckDash swipe
+    transemi: TruckDash gesture
 
     # Transmission stalk vertical switch.
-    geardrive: TruckDash swipe
-    gearreverse: TruckDash swipe
-    gear0: TruckDash swipe
+    geardrive: TruckDash gesture
+    gearreverse: TruckDash gesture
+    gear0: TruckDash gesture

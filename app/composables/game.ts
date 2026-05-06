@@ -265,13 +265,19 @@ const integratedLightingBrightness = computed(() => {
 // Haptic feedback
 //-----------------------------------------------------------------------------
 
+let hapticTimer = 100;
+
 // This is called whenever an emulated switch changes position to provide
 // haptic feedback via vibration, if enabled.
 function haptic() {
+    if (hapticTimer == 0) return;
     try {
-        // TODO configuration
-        navigator.vibrate(100);
+        navigator.vibrate(hapticTimer);
     } catch (e) {}
+}
+
+function hapticSyncCfg(configuration: ConfigurationData) {
+    hapticTimer = configuration.gestureHapticTimer;
 }
 
 //-----------------------------------------------------------------------------
@@ -591,7 +597,7 @@ let utilStalkBlinkersCfgMomentaryCount: number = 3;
 
 // Amount of steering input in percentage points counter to blinker direction
 // needed to automatically cancel the blinkers, or 0 to disable this behavior.
-let utilStalkBlinkersCfgAutoOffSensitivity: number = 20;
+let utilStalkBlinkersCfgAutoOffSensitivity: number = 10;
 
 function utilStalkBlinkersSyncCfg(configuration: ConfigurationData) {
     utilStalkBlinkersCfgMomentaryCount = configuration.stalkBlinkersMomentaryCount;
@@ -978,12 +984,16 @@ export type GameInput
     | "transGear-inc" | "transGear-dec" | "transGear-rel"
     | "transBrake-inc" | "transBrake-dec" | "transBrake-rel"
     | "transDirection-inc" | "transDirection-dec" | "transDirection-rel"
-    | "transMode-inc" | "transMode-dec" | "transMode-rel";
+    | "transMode-inc" | "transMode-dec" | "transMode-rel"
+    | "activate-inc" | "activate-dec" | "activate-rel";
 
 // Sends commands to the game. This is mostly just a translation step between
 // TruckDash actions and semantic input for the game engine.
 function sendToGame(input: GameInput) {
     switch (input) {
+        case "activate-inc": gameSocket.holdInput("activate"); break;
+        case "activate-dec": gameSocket.pressInput("activate"); break;
+        case "activate-rel": gameSocket.releaseInput("activate"); break;
         case "ignition-inc": ignitionSwitchInc(); break;
         case "ignition-dec": ignitionSwitchDec(); break;
         case "ignition-rel": ignitionSwitchRel(); break;
@@ -1013,6 +1023,7 @@ function sendToGame(input: GameInput) {
 }
 
 function syncControlBehaviorConfig(configuration: ConfigurationData) {
+    hapticSyncCfg(configuration);
     utilStalkLowBeamSyncCfg(configuration);
     utilStalkHighBeamSyncCfg(configuration);
     utilStalkBlinkersSyncCfg(configuration);

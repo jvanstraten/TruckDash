@@ -42,10 +42,10 @@ export type GestureConfig = {
     receiveHolds?: boolean;
     receiveRotations?: boolean;
     receiveMultiTouch?: boolean;
-    minimumDistanceRatio?: number;
-    maximumTapDistanceRatio?: number;
-    coneStrictness?: number;
-    holdTimeout?: number;
+    minimumDistanceRatio?: () => number;
+    maximumTapDistanceRatio?: () => number;
+    coneStrictness?: () => number;
+    holdTimeout?: () => number;
 }
 
 export function useGestureDetection(
@@ -105,10 +105,10 @@ export function useGestureDetection(
     const receiveHolds: boolean = config?.receiveHolds ?? false;
     const receiveRotations: boolean = config?.receiveRotations ?? false;
     const receiveMultiTouch: boolean = config?.receiveMultiTouch ?? false;
-    const minimumDistanceRatio: number = config?.minimumDistanceRatio ?? defaultMinimumDistanceRatio;
-    const maximumTapDistanceRatio: number = (config?.maximumTapDistanceRatio ?? minimumDistanceRatio) / 2;
-    const coneStrictness: number = config?.coneStrictness ?? defaultConeStrictness;
-    const holdTimeout: number = config?.holdTimeout ?? defaultHoldTimeout;
+    const minimumDistanceRatio: () => number = config?.minimumDistanceRatio ?? (() => defaultMinimumDistanceRatio);
+    const maximumTapDistanceRatio: () => number = config?.maximumTapDistanceRatio ?? (() => minimumDistanceRatio() / 2);
+    const coneStrictness: () => number = config?.coneStrictness ?? (() => defaultConeStrictness);
+    const holdTimeout: () => number = config?.holdTimeout ?? (() => defaultHoldTimeout);
 
     // Current state of gesture detection.
     let gestureState: GestureState | null = null;
@@ -175,7 +175,7 @@ export function useGestureDetection(
             gestureState.holdTimer = null;
         }
         if (run && receiveHolds) {
-            gestureState.holdTimer = window.setTimeout(() => onHoldTimer(), holdTimeout);
+            gestureState.holdTimer = window.setTimeout(() => onHoldTimer(), holdTimeout());
         }
     }
 
@@ -195,12 +195,12 @@ export function useGestureDetection(
         dy /= gestureState.pointers.size;
 
         const distanceSqr = dx * dx + dy * dy;
-        const threshold = Math.min(window.innerWidth, window.innerHeight) * minimumDistanceRatio;
+        const threshold = Math.min(window.innerWidth, window.innerHeight) * minimumDistanceRatio();
         if (distanceSqr < threshold * threshold) return false;
-        if (Math.abs(dx) > Math.abs(dy) * coneStrictness) {
+        if (Math.abs(dx) > Math.abs(dy) * coneStrictness()) {
             return dx > 0 ? "right" : "left";
         }
-        if (Math.abs(dy) > Math.abs(dx) * coneStrictness) {
+        if (Math.abs(dy) > Math.abs(dx) * coneStrictness()) {
             return dy > 0 ? "down" : "up";
         }
         return undefined;
@@ -387,7 +387,7 @@ export function useGestureDetection(
             const dx = pointerState.currentX - pointerState.startX;
             const dy = pointerState.currentY - pointerState.startY;
             const distanceSqr = dx * dx + dy * dy;
-            const threshold = Math.min(window.innerWidth, window.innerHeight) * maximumTapDistanceRatio;
+            const threshold = Math.min(window.innerWidth, window.innerHeight) * maximumTapDistanceRatio();
             if (distanceSqr > threshold * threshold) {
                 gestureState.moved = true;
             }

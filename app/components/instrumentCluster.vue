@@ -36,7 +36,7 @@ const {
         :d="design.layer0.pth"
         :style="{'fill': shading.lowerBackground}"
     />
-    <g :style="configuration.perfShadows ? shading.primary.diffuse : shading.primary.combined">
+    <g :style="configuration.perfOcclusion ? shading.primary.diffuse : shading.primary.combined">
       <path :d="design.layer0.prim.pth"/>
       <text
           v-for="label in design.layer0.prim.lbl"
@@ -44,7 +44,7 @@ const {
           :style="{'font-size': (0.7 * label.sz) + 'pt'}"
       >{{ label.txt }}</text>
     </g>
-    <g :style="configuration.perfShadows ? shading.secondary.diffuse : shading.secondary.combined">
+    <g :style="configuration.perfOcclusion ? shading.secondary.diffuse : shading.secondary.combined">
       <path :d="design.layer0.sec.pth"/>
       <text
           v-for="label in design.layer0.sec.lbl"
@@ -63,13 +63,13 @@ const {
 
     <!-- LAYER 0 AMBIENT SHADING -->
     <path
-        v-if="configuration.perfShadows"
+        v-if="configuration.perfOcclusion"
         :d="design.layer1.pth"
         class="instrumentCluster_occlusion"
     />
 
     <!-- LAYER 0 EMISSION -->
-    <g v-if="configuration.perfShadows" :style="shading.primary.emission">
+    <g v-if="configuration.perfOcclusion" :style="shading.primary.emission">
       <path :d="design.layer0.prim.pth"/>
       <text
           v-for="label in design.layer0.prim.lbl"
@@ -77,7 +77,7 @@ const {
           :style="{'font-size': (0.7 * label.sz) + 'pt'}"
       >{{ label.txt }}</text>
     </g>
-    <g v-if="configuration.perfShadows" :style="shading.secondary.emission">
+    <g v-if="configuration.perfOcclusion" :style="shading.secondary.emission">
       <path :d="design.layer0.sec.pth"/>
       <text
           v-for="label in design.layer0.sec.lbl"

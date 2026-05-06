@@ -2,14 +2,17 @@ import type { Configuration } from "~/composables/configuration";
 import type { StalkMap, StalkAxisType } from "~/composables/stalkMap";
 import type { GestureData } from "~/composables/gestureDetection";
 
-// Rel = pointers released; inc/dec moves axis in the given direction.
-export type AxisDirection = "inc" | "dec" | "rel";
-
-export type AxisType = StalkAxisType | "ignition" | "parkingBrake";
+// Switches with multiple discrete positions. Buttons are also covered in a
+// hacky way:
+//  - inc = hold
+//  - rel = release
+//  - dec = press
+export type SwitchType = StalkAxisType | "ignition" | "parkingBrake" | "activate";
+export type SwitchAction = "inc" | "dec" | "rel";
 
 export type ControlAction
     = "layer" | "menu"
-    | [AxisType, AxisDirection]
+    | [SwitchType, SwitchAction]
     | undefined;
 
 export type SwipeZoneMapping = {
@@ -39,6 +42,8 @@ export type GestureMapping = {
     ccw: ControlAction;
     up2: ControlAction;
     down2: ControlAction;
+    click2: ControlAction;
+    hold2: ControlAction;
 };
 
 export function useGestureControls(
@@ -70,7 +75,7 @@ export function useGestureControls(
 
     function startControlLayerTimer() {
         stopControlLayerTimer();
-        controlLayerTimer.value = window.setTimeout(() => resetControlLayer(), 500);
+        controlLayerTimer.value = window.setTimeout(() => resetControlLayer(), configuration.value.gestureControlLayerTimer);
     }
 
     function describeActionWithText(action: ControlAction): string | undefined {
@@ -81,6 +86,10 @@ export function useGestureControls(
         }[action];
         if (action[1] == "rel") return undefined;
         return {
+            activate: {
+                inc: "interact/activate (hold)",
+                dec: "interact/activate (press)",
+            },
             ignition: {
                 inc: "ignition key clockwise",
                 dec: "ignition key counterclockwise",
@@ -167,7 +176,7 @@ export function useGestureControls(
         const sw = convertStalkToSwipeMapping(layers.sw, side);
 
         let mappings = [sw, move];
-        switch (configuration.value.stalkGestureSwitches) {
+        switch (configuration.value.gestureSingleSwipeZones) {
             case "outer":
                 break;
             case "inner":
@@ -194,10 +203,12 @@ export function useGestureControls(
             ccw: undefined,
             up2: undefined,
             down2: undefined,
+            click2: undefined,
+            hold2: undefined,
         };
 
         const config = configuration.value;
-        const stalks = config.stalkGestureMode;
+        const stalks = config.gestureSingleSwipes;
         if (stalks == "bothStalks" || stalks == "leftStalk") {
             const axes = stalkConfiguration.left.value;
             const layers = expandStalkAxesToLayers(axes);
@@ -220,11 +231,11 @@ export function useGestureControls(
         }
 
         // Click enters menu unless it's used for layers.
-        if (!configuration.value.stalkHoldForMenu) {
+        if (!configuration.value.gestureSingleHoldForMenu) {
             mapping.click = "menu";
         }
-        if (configuration.value.stalkGestureSwitches == "click") {
-            if (configuration.value.stalkHoldForMenu || controlLayer.value == 0) {
+        if (configuration.value.gestureSingleSwipeZones == "click") {
+            if (configuration.value.gestureSingleHoldForMenu || controlLayer.value == 0) {
                 mapping.click = "layer";
             }
         }
@@ -232,22 +243,33 @@ export function useGestureControls(
         // Hold always enters menu.
         mapping.hold = "menu";
 
+        // Two-finger tap/hold for activate.
+        if (config.gestureDoubleTapHold == "activate") {
+            mapping.click2 = ["activate", "dec"];
+            mapping.hold2 = ["activate", "inc"];
+        }
+
         // Rotations control ignition.
-        // TODO allow this to be turned off.
-        mapping.cw = ["ignition", "inc"];
-        mapping.ccw = ["ignition", "dec"];
+        if (config.gestureDoubleRotate == "ignition") {
+            mapping.cw = ["ignition", "inc"];
+            mapping.ccw = ["ignition", "dec"];
+        }
 
         // Two-finger up/down swipes control the parking brake.
-        // TODO allow this to be turned off or reversed.
-        mapping.down2 = ["parkingBrake", "inc"];
-        mapping.up2 = ["parkingBrake", "dec"];
+        if (config.gestureDoubleSwipeVertical == "park") {
+            mapping.down2 = ["parkingBrake", "inc"];
+            mapping.up2 = ["parkingBrake", "dec"];
+        } else if (config.gestureDoubleSwipeVertical == "parkInvert") {
+            mapping.down2 = ["parkingBrake", "dec"];
+            mapping.up2 = ["parkingBrake", "inc"];
+        }
 
         return mapping;
     });
 
-    // Once an event is reported for an axis, we lock all future events for that
-    // gesture to the same axis.
-    let axisLock: AxisType | "nonAxis" | undefined = undefined;
+    // Once an event is reported for a switch or button, we lock all future
+    // events for that gesture to the same switch/button.
+    let inputLock: SwitchType | "other" | undefined = undefined;
 
     function decodeGesture(data: GestureData): ControlAction {
 
@@ -276,27 +298,31 @@ export function useGestureControls(
                 action = actions.up2;
             } else if (data.type == "down") {
                 action = actions.down2;
+            } else if (data.type == "click") {
+                action = actions.click2;
+            } else if (data.type == "hold") {
+                action = actions.hold2;
             }
         }
 
-        // Handle axis lock. If we're locked to an axis, propagate release
-        // events, and block all events for other axes. If multi-swipe is
-        // disabled, block all events while we have an axis lock, even for
-        // the same axis.
-        const axis = (typeof action == "string" || action == undefined) ? "nonAxis" : action[0];
-        if (axisLock !== undefined) {
-            if (data.type == "release" && axisLock !== "nonAxis") {
-                action = [axisLock, "rel"];
-            } else if (axis !== axisLock || !configuration.value.stalkMultiSwipe) {
+        // Handle input lock. If we're locked to an input, propagate release
+        // events, and block all events for other inputs. If multi-swipe is
+        // disabled, block all events while we have an input lock, even for
+        // the same input.
+        const input = (typeof action == "string" || action == undefined) ? "other" : action[0];
+        if (inputLock !== undefined) {
+            if (data.type == "release" && inputLock !== "other") {
+                action = [inputLock, "rel"];
+            } else if (input !== inputLock || !configuration.value.gestureSingleSwipeLong) {
                 action = undefined;
             }
         }
 
-        // Update axis lock.
+        // Update input lock.
         if (data.last) {
-            axisLock = undefined;
-        } else if (axisLock === undefined) {
-            axisLock = axis;
+            inputLock = undefined;
+        } else if (inputLock === undefined) {
+            inputLock = input;
         }
 
         // Display test messages when mapping is active.

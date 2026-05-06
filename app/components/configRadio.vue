@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import configItem from "~/components/configItem.vue";
+const emit = defineEmits(["activate"]);
 defineProps(["title", "subtitle", "value", "joiner"]);
 const model = defineModel();
 </script>
@@ -8,7 +9,7 @@ const model = defineModel();
   <configItem
       :title="title"
       :subtitle="subtitle"
-      @activate="model = value"
+      @activate="model = value; emit('activate')"
   >
     <template v-slot:prepend>
       <div v-if="joiner" :class="['radio-joiner', 'radio-joiner-' + joiner]"/>

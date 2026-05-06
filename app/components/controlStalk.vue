@@ -179,7 +179,7 @@ const bodyStyle = computed(() => {
 
   // Enable/disable shading.
   Object.assign(style, { backgroundColor: shading.stalkBackground });
-  if (configuration.perfShadows) {
+  if (configuration.perfOcclusion) {
     Object.assign(style, { filter: "drop-shadow(0 0 0.2cqw #0003)" });
   } else {
     Object.assign(style, { border: "0.2cqw solid #000" });
@@ -262,7 +262,7 @@ function classes(cls: string) {
   return [`stalk-${cls}`, `stalk-${cls}-${side}`]
 }
 function shadedClasses(cls: string) {
-  const shaded = configuration.perfShadows ? "shaded" : "unshaded";
+  const shaded = configuration.perfOcclusion ? "shaded" : "unshaded";
   return [`stalk-${cls}`, `stalk-${cls}-${side}`, `stalk-${cls}-${shaded}`]
 }
 
@@ -367,7 +367,7 @@ function shadedClasses(cls: string) {
               :style="getMarkingStyle(layer)"
               size="4cqw"
           >mdi-dots-vertical</v-icon>
-          <div v-if="configuration.perfShadows" class="stalk-switch-grip"/>
+          <div v-if="configuration.perfOcclusion" class="stalk-switch-grip"/>
         </div>
       </div>
       <div class="stalk-group">
@@ -377,7 +377,7 @@ function shadedClasses(cls: string) {
             :style="ySwitchSeamStyle"
         />
       </div>
-      <div v-if="configuration.perfShadows" class="stalk-shadow"/>
+      <div v-if="configuration.perfOcclusion" class="stalk-shadow"/>
     </div>
   </div>
 </template>
