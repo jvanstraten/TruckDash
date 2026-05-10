@@ -45,7 +45,7 @@ export function useStalkMap(configuration: Configuration) : StalkMap {
         }
         return {
             moveX: { type: highBeamType, invert: config.stalkInvertHighBeam },
-            moveY: { type: "blinkers", invert: config.stalkSwap == "lhd" },
+            moveY: { type: "blinkers", invert: config.generalDriveSide == "lhd" },
             swX: { type: "lowBeam", invert: config.stalkInvertLowBeam },
             swY: { type: "wipers", invert: config.stalkInvertWipers },
         };
@@ -78,7 +78,7 @@ export function useStalkMap(configuration: Configuration) : StalkMap {
     }
 
     const left = computed<StalkAxes>(() => {
-        if (configuration.value.stalkSwap == "lhd") {
+        if (configuration.value.generalDriveSide == "lhd") {
             return getUtilityStalkAxes();
         } else {
             return getTransStalkAxes();
@@ -86,7 +86,7 @@ export function useStalkMap(configuration: Configuration) : StalkMap {
     });
 
     const right = computed<StalkAxes>(() => {
-        if (configuration.value.stalkSwap == "lhd") {
+        if (configuration.value.generalDriveSide == "lhd") {
             return getTransStalkAxes();
         } else {
             return getUtilityStalkAxes();

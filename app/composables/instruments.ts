@@ -70,20 +70,23 @@ export function useInstruments(gameState: GameState, configuration: Configuratio
         let min = remain % 60;
         remain = Math.floor(remain / 60);
         let hrs = remain;
-        if (!negative) {
-            if (hrs > 199) {
-                hrs = 199;
-                min = 59;
-            }
-        } else {
+        if (negative) {
             if (hrs > 9) {
                 hrs = 9;
                 min = 59;
             }
-            hrs = -hrs;
+        } else {
+            if (hrs > 199) {
+                hrs = 199;
+                min = 59;
+            }
         }
-        let hrsf = hrs.toString().padStart(3, "!");
-        let minf = min.toString().padStart(2, "0");
+        let hrsf = hrs.toString();
+        if (negative) {
+            hrsf = `-${hrsf}`;
+        }
+        hrsf = hrsf.padStart(3, "!");
+        const minf = min.toString().padStart(2, "0");
         return `${hrsf}:${minf}`;
     }
 
@@ -179,7 +182,7 @@ export function useInstruments(gameState: GameState, configuration: Configuratio
         const max = gameState.unpaused.util.speedLimit;
         const tol = (configuration.value.instrStrictOverspeed ? 2 : 6) / 3.6;
         if (typeof max != "number" || max <= 0) return 0;
-        if (speed > max + tol) return 2;
+        if (speed > max + tol * 3) return 2;
         if (speed > max + tol) return 1;
         return 0;
     }

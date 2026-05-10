@@ -2,6 +2,9 @@
 # Which port the server should listen on.
 port: 8080
 
+title: TruckDash
+link: "https://github.com/jvanstraten/TruckDash"
+
 # Which content types the static server should use. 'if' is a regex that's
 # matched against the filename; if it matches, the content type in 'then'
 # is sent.
